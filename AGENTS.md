@@ -4,7 +4,7 @@
 - 分支 `modern` → 远端 `main`；上游基线 commit `724b90a0`（JL-Mod 0.87.1）
 - 版本：`versionName 1.0.1` / `versionCode 52`
 - v1.1.0/v1.1.1（即时存档实验版）已回滚并从 Releases 删掉，见「六点五」
-- Release 附件：`JL-Mod-Modern_1.0.0.apk`（用 `jlmod.keystore` 签名，密钥不入库）
+- Release 附件：`JL-Mod-Modern_1.0.1.apk`（用 `jlmod.keystore` 签名，密钥不入库）
 - 重新发版：改版本号 → `./gradlew assembleEmulatorRelease` → `git tag/gpush` → `gh release create --repo sankerXD/JL-Mod-Modern`
 
 > 这里记录本次改造的**全过程**：为什么这么改、踩过哪些坑、怎么回滚。
@@ -346,7 +346,117 @@ Mask brightness、Scanline、Threshold。
 
 ---
 
-## 七、文件清单
+## 七、坑点清单（血泪版）
+
+每条格式：**现象 → 原因 → 结论**。都是实机踩出来的，以后改这块先扫一眼。
+
+### 模拟器内核
+
+**1. 手柄 L2/R2 按了没反应**
+`getevent` 实测：`L2 = EV_ABS ABS_Z`、`R2 = EV_ABS ABS_RZ`（模拟轴）、`A = EV_KEY BTN_GAMEPAD`（按键）。
+原版 JL-Mod 里**一处 `onGenericMotionEvent` 都没有**，轴事件永远收不到。
+→ 新增 `TriggerAxisHandler`，把轴翻成 `KEYCODE_BUTTON_L2/R2` 再走原有按键通道（0.5 按下 / 0.3 松开，带滞回）。
+
+**2. 一个虚拟键只能绑一个按键**
+原版 `KeyMapperActivity.dispatchKeyEvent` 会先删掉"value 相同"的旧条目。
+把虚拟键 `1` 绑到手柄 Y，原本绑在 `1` 上的 L2 就会被自动解绑。
+→ 这是原版行为，不是 bug；改映射前先想清楚。
+
+**3. 着色器参数全是 0 / 画面直接黑屏**
+`Canvas` 只在 `settings.shader.values != null` 时才 `glUniform4fv(u_setting)`。
+不填 values → `u_setting` 保持 `(0,0,0,0)`；slotmask 里 `msk = 0` 就整屏黑。
+→ `ShaderList` 解析 ini 时必须把 `SettingDefaultValue1..4` 填进 `values`。
+
+**4. 从 config.json 读回来的着色器找不到文件**
+`ShaderInfo.dir` 原本是 `transient`，反序列化后为 null，`dir + fragment` 就是个非法路径。
+→ 改成持久化字段 `@SerializedName("dir")`，并在 `MicroLoader` 里对空值兜底到工作目录的 `shaders/`。
+
+### UI / 资源
+
+**5. 刚选的着色器"自己变回去了"**
+从文件选择器返回时 `ConfigActivity.onResume()` → `loadParams(true)` → `loadConfig()` 从磁盘重读，把内存里的选择覆盖掉。
+→ 用 `selectedShader` + `shaderModified` 在本次会话内保住用户的选择。
+
+**6. 点着色器那一行完全没反应**
+点击监听原本挂在"图形模式切到硬件加速"的分支里 —— GL 模式下那个分支永远不执行。
+→ 监听移到 `onCreate` 里无条件挂。
+
+**7. 配置页的值列对不齐 / 文字被裁掉**
+- 其它行靠 `@id/barrierScreenConfig`（Barrier）对齐，`LinearLayout` 不参与约束 → 新行拆成直接子 View，
+  用 `end_toStartOf` / `start_toEndOf=barrier`，并把标签加进 `constraint_referenced_ids`
+- 48dp 的行里塞 Spinner，选中项文字会被压到底部再裁掉 → 换成可点击 TextView
+
+**8. 设置图标偏左、偏大、甚至看不见**
+原版图标规格是 `48dp` 画布 + `viewport 24` + `group scale 0.6 / translate 5`。
+直接写 `24dp` 满画布 → 偏左偏大；用工具栏的白色 `ic_action_keyboard` → 浅色背景上等于隐形。
+→ 新图标全按原版规格重写（可见内容中心 x=70 与原有图标完全一致）。
+
+**9. 边缘滑出抽屉时状态栏闪一下**
+`IMMERSIVE_STICKY` 对边缘手势的固有反应，不是布局 bug。
+→ 可接受；用 MENU/BACK 键打开则完全不闪。
+
+### 构建 / 发布
+
+**10. R8 会把 `Log.d/v/i` 全部删掉**
+AGP 默认的 `proguard-android-optimize.txt` 带 `-assumenosideeffects`，只有 `w/e` 保留。
+排查时加了一堆 `Log.d`，结果一条都不出现，白折腾半天以为代码没执行。
+→ 调试信息一律用 `Log.e`（或 Toast）。
+
+**11. 不需要 NDK 也能编译**
+关掉 `externalNativeBuild`，把原版 APK 里那 68 个 `.so` 放进 `app/src/main/jniLibs/`。
+→ 仓库多 8.5MB，换"装个 JDK17 + SDK 就能编"。
+
+**12. 签名密钥绝对不能提交**
+`.gitignore` 原本只挡 `*.jks`，`jlmod.keystore` / `keystore.properties` 会被 commit 上去。
+→ 已补 `*.keystore` 和 `keystore.properties`。密钥丢了，以后发的更新用户必须卸载重装。
+
+**13. 卸载重装会换 uid**
+新 App 是 `u0_a97`，老数据是 `u0_a84` 建的。`/sdcard` 上**能覆盖、但可能删不掉**（unlink 被拒）。
+→ 真要删就加"重命名成 `.stale`"兜底。SharedPreferences（主题等）会重置，游戏库和配置不受影响。
+
+**14. 改 `config.json` 前必须先 force-stop**
+App 退出时会把内存里的配置写回，覆盖外部修改。
+→ `jl_map.py` 每次先 `am force-stop`。
+
+### 存档（已回滚的功能，留档防重做）
+
+**15. J2ME 的 JVM 没法冻结**
+没有可序列化的"模拟机器"，ART 也不提供堆快照 → **真正的任意帧存档物理上做不到**。
+
+**16. RMS 是即时落盘的，但游戏只在自己存档时才写**
+`AndroidRecordStoreManager.saveToDisk` 是 open→write→close，所以磁盘一直是最新的 ——
+问题是"最新"只到上一次游戏内存档。实测：slot1 写于 00:51:40，读档前的 backup 写于 00:53:04，
+两者 **md5 完全一致**，期间 `/sdcard/JL-Mod` 没有任何文件被修改。
+→ 所以"即时存档"实际等于"上一次游戏内存档"，名字误导，最终整个回滚。
+
+**17. `RecordStore` 是进程内单例，换 MIDlet 不清缓存**
+`javax.microedition.rms.RecordStore` 属于 APK 自身的类，`AndroidRecordStoreManager.recordStores`
+在进程里只有一份，换 MIDlet 不会失效 → 需要 `RecordStore.clearCaches()` 触发 `reset()`。
+
+**18. J2ME 游戏在 `destroyApp()` 里基本都会杀进程**
+它们通常调 `notifyDestroyed()` → `Process.killProcess(myPid())`（logcat 实测 `Sending signal. PID: SIG 9`）。
+想在同一进程里重启游戏**不能调 destroyApp**，只能 `quitSafely()` 掉 MidletThread 再
+`new MicroLoader(...)`（新 AppClassLoader）拉起新实例。
+
+### 其它已知问题
+
+**19. 每个游戏的 canvas 分辨率是卖家猜的**
+画面"错位 / 有条竖带 / 只填一部分" = 那个游戏宽高配错了（例：宠物王国被配成 320×240，实际是 240×320）。
+分布：240×320 266 个、320×240 183 个、320×320 24 个、605×317 11 个、744×390 7 个…
+→ 长按游戏 → 设置 → 屏幕选项 → 宽/高（预设里已补常用尺寸）。
+
+**20. 游戏由天马G 传参启动**
+jar 在 `/sdcard/roms/JAVA/`，按文件名生成 `converted/<名>/` 和 `configs/<名>/`。
+没有预置配置的 21 个游戏走代码默认值（映射和滤镜靠内置默认兜底）。
+
+### 想要回滚进度时的土办法
+
+功能上做不了，但手动能做：把 `/sdcard/JL-Mod/data/<游戏名>/` 整个文件夹拷走就是一份完整存档，
+要回滚再拷回去（拷之前先退出游戏）。用 MT管理器 之类的文件管理器就能干。
+
+---
+
+## 八、文件清单
 
 | 文件 | 说明 |
 |---|---|
