@@ -1,8 +1,9 @@
 # AGENTS.md — 维护者工作笔记
 
-**已发布**：https://github.com/sankerXD/JL-Mod-Modern · v1.0.0（2024-10-18 发）
+**已发布**：https://github.com/sankerXD/JL-Mod-Modern · v1.0.1
 - 分支 `modern` → 远端 `main`；上游基线 commit `724b90a0`（JL-Mod 0.87.1）
-- 版本：`versionName 1.0.0` / `versionCode 49`
+- 版本：`versionName 1.0.1` / `versionCode 52`
+- v1.1.0/v1.1.1（即时存档实验版）已回滚并从 Releases 删掉，见「六点五」
 - Release 附件：`JL-Mod-Modern_1.0.0.apk`（用 `jlmod.keystore` 签名，密钥不入库）
 - 重新发版：改版本号 → `./gradlew assembleEmulatorRelease` → `git tag/gpush` → `gh release create --repo sankerXD/JL-Mod-Modern`
 
@@ -318,6 +319,30 @@ Mask brightness、Scanline、Threshold。
 
 修法：长按游戏 → 设置 → 屏幕选项 → 宽/高（点右边图标有预设列表，这次补进了
 128×160、176×208、240×320、240×400、320×240、352×416、360×640 等常用尺寸）。
+
+---
+
+## 六点五、为什么不做「即时存档」（曾实现，已整个回滚）
+
+1.1.0/1.1.1 做过一版 10 槽位的即时存档（快照 `/sdcard/JL-Mod/data/<游戏>/` 里的 RMS 文件 + 原地重启），
+最后**整个回滚**，原因：
+
+- J2ME 是直接跑在 Android 进程里的 Java 字节码，**没有可序列化的模拟机器**，JVM 堆不能快照 →
+  真正的"任意帧存档"不可能实现
+- 能做的只有"游戏自身存档文件"的快照，而 J2ME 游戏**只在自己存档时写盘**。
+  实测证据：某次 slot1 (00:51:40) 与读档前的 backup (00:53:04) **md5 完全一致**，
+  且期间整个 `/sdcard/JL-Mod` 没有任何文件被修改 → 玩家这 1 分半的"进度"从未落盘
+- 于是"即时存档"这个名字会误导：用户以为存的是当前进度，其实只能存到上一次游戏内存档点
+
+排查过程中确认的一些机制（以后可能有用）：
+
+- RMS 写入是 open→write→close，**即时落盘**（`AndroidRecordStoreManager.saveToDisk`）
+- `javax.microedition.rms.RecordStore` 属于 APK 自身的类，在进程内是单例；
+  换 MIDlet 不会清缓存，需要 `AndroidRecordStoreManager.reset()`
+- J2ME 游戏在 `destroyApp()` 里基本都会调 `notifyDestroyed()` → `Process.killProcess(myPid())`，
+  所以想在同一进程里重启游戏**不能调 destroyApp**，只能 `quitSafely()` 掉 MidletThread 再
+  `new MicroLoader(...)`（新 AppClassLoader）拉起新实例
+- 存档文件由旧 App（不同 uid）创建时，新 App 可能**删不掉**（能覆盖不能 unlink）→ 需要重命名兜底
 
 ---
 
