@@ -19,9 +19,6 @@ device with a D-pad, four face buttons and two shoulders.
 - **Global scaling.** Stretch / integer scaling / fit-to-edge, applied to every game. Integer mode is
   centered and never crops.
 - **Full screen.** The in-game action bar is gone; the menu slides in from the left edge (or the MENU key).
-- **Save states (10 slots).** Snapshot a game's own save data to one of ten slots from the in-game menu and
-  load it back later — the game is restarted so it picks the data up. Handy for games with a single built-in
-  save slot.
 - **Sane defaults.** Gamepad mapping and shader defaults apply to newly added games with no configuration,
   and the resolution picker now offers the usual J2ME resolutions.
 
@@ -50,11 +47,6 @@ device with a D-pad, four face buttons and two shoulders.
    `adb push shaders/ /sdcard/JL-Mod/shaders/`)
 4. **Settings → Scaling mode** — integer or fit-to-edge
 5. Per game: long-press the game → Settings (resolution, per-game shader/keys)
-6. **In game:** MENU / left-edge swipe → *Save state* / *Load state* (10 slots)
-
-> Save states snapshot the game's own persistent data (RMS record stores), because a J2ME VM cannot be frozen.
-> If a game only writes it saves at save points, a snapshot is the state of the last in-game save. Loading a slot
-> backs up the current data to a hidden slot first, so a wrong load can be undone.
 
 ## Build
 

@@ -1,11 +1,5 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
-        android:id="@+id/action_save_state"
-        android:title="@string/action_save_state" />
-    <item
-        android:id="@+id/action_load_state"
-        android:title="@string/action_load_state" />
-    <item
         android:id="@+id/action_exit_midlet"
         android:title="@string/exit" />
     <item

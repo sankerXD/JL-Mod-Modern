@@ -278,14 +278,4 @@
     <string name="shader_none_selected">No shader loaded</string>
     <string name="global_keymap_title">Global key mapping</string>
     <string name="global_keymap_summary">Applies to every game; a game with its own mapping overrides it</string>
-    <string name="action_save_state">Save state</string>
-    <string name="action_load_state">Load state</string>
-    <string name="slot_empty">Slot %1$d — empty</string>
-    <string name="slot_filled">Slot %1$d — %2$s</string>
-    <string name="state_saving">Saving…</string>
-    <string name="state_saved">Saved to slot %1$d (%2$d files)</string>
-    <string name="state_loading">Loading, restarting the game…</string>
-    <string name="state_failed">Failed</string>
-    <string name="state_load_confirm">Load slot %1$d and restart the game?\n\nThe current progress is backed up to the auto slot, so you can undo this.</string>
-    <string name="slot_empty_toast">Slot %1$d is empty</string>
 </resources>

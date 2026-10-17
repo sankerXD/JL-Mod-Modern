@@ -321,30 +321,6 @@ Mask brightness、Scanline、Threshold。
 
 ---
 
-## 六点五、即时存档 / 读档（10 个槽位）
-
-**入口**：游戏内 MENU 键或左边缘滑出抽屉 → **即时存档 / 读取存档**（抽屉第一、二项）
-
-原理（重要）：J2ME 的 JVM 没法冻结（游戏是本地跑的 Java 字节码），所以做的是**游戏自身存档数据快照**：
-
-- JL-Mod 把每个游戏的持久化数据（RMS RecordStore）写在 `/sdcard/JL-Mod/data/<游戏名>/`
-- 抓过源码确认：每次 `setRecord/addRecord` 都是 open→write→close，**即时落盘**，所以运行中快照磁盘文件就是最新进度
-- 槽位存到 `/sdcard/JL-Mod/saves/<游戏名>/slot1..10/`
-- **读档** = 把槽位文件拷回 data 目录，然后**重启游戏**：
-  - 每个 MIDlet 由独立的 `AppClassLoader` 加载，RMS 的静态缓存是全新的 → 重启就会重新读盘
-  - 重启方式：`AlarmManager` 1.5s 后拉起原 intent + `MidletThread.destroyApp()`（1s 后杀 `:midlet` 进程）
-- 读档前会把当前 data 目录备份到隐藏槽 `backup/`，读错了可以再拿回来
-- 10 个槽位，弹窗里显示每个槽位的时间戳
-
-**代码**：`util/SaveSlotManager.java`（递归拷贝/删除）、`MicroActivity` 的
-`showSaveStateDialog/doSaveState/confirmLoadState/doLoadState/restartMidlet`、
-菜单项在 `res/menu/midlet_displayable.xml`（抽屉自动生成，所以自动出现）。
-
-**实测**：存档 → 往 data 目录塞一个 MARKER.txt → 读档 → MARKER 被清掉、backup 槽有 21 个文件、
-游戏自动重启并正常进入游戏（无崩溃）。
-
----
-
 ## 七、文件清单
 
 | 文件 | 说明 |
