@@ -29,7 +29,10 @@ import android.media.AudioManager;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.os.IBinder;
 import android.text.Editable;
 import android.text.InputType;
@@ -70,6 +73,9 @@ import org.acra.ACRA;
 import org.acra.ErrorReporter;
 
 import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -93,6 +99,7 @@ import ru.playsoftware.j2meloader.config.Config;
 import ru.playsoftware.j2meloader.databinding.ActivityMicroBinding;
 import ru.playsoftware.j2meloader.databinding.DialogInputBinding;
 import ru.playsoftware.j2meloader.util.Constants;
+import ru.playsoftware.j2meloader.util.SaveSlotManager;
 import ru.playsoftware.j2meloader.util.LogUtils;
 
 public class MicroActivity extends AppCompatActivity {
@@ -347,6 +354,88 @@ public class MicroActivity extends AppCompatActivity {
 		return visible;
 	}
 
+	private void showSaveStateDialog(boolean save) {
+		final String[] labels = new String[SaveSlotManager.SLOT_COUNT];
+		SimpleDateFormat format = new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault());
+		for (int i = 0; i < labels.length; i++) {
+			int slot = i + 1;
+			if (SaveSlotManager.hasSlot(appName, slot)) {
+				labels[i] = getString(R.string.slot_filled, slot, format.format(
+						new Date(SaveSlotManager.getSlotTime(appName, slot))));
+			} else {
+				labels[i] = getString(R.string.slot_empty, slot);
+			}
+		}
+		new AlertDialog.Builder(this)
+				.setTitle(save ? R.string.action_save_state : R.string.action_load_state)
+				.setItems(labels, (dialog, which) -> {
+					if (save) {
+						doSaveState(which + 1);
+					} else {
+						confirmLoadState(which + 1);
+					}
+				})
+				.setNegativeButton(R.string.CANCEL_CMD, null)
+				.show();
+	}
+
+	private void doSaveState(int slot) {
+		Toast.makeText(this, R.string.state_saving, Toast.LENGTH_SHORT).show();
+		new Thread(() -> {
+			final int count = SaveSlotManager.save(appName, slot);
+			runOnUiThread(() -> Toast.makeText(this,
+					count >= 0 ? getString(R.string.state_saved, slot, count)
+							: getString(R.string.state_failed),
+					Toast.LENGTH_SHORT).show());
+		}, "SaveState").start();
+	}
+
+	private void confirmLoadState(int slot) {
+		if (!SaveSlotManager.hasSlot(appName, slot)) {
+			Toast.makeText(this, getString(R.string.slot_empty_toast, slot),
+					Toast.LENGTH_SHORT).show();
+			return;
+		}
+		new AlertDialog.Builder(this)
+				.setTitle(R.string.action_load_state)
+				.setMessage(getString(R.string.state_load_confirm, slot))
+				.setPositiveButton(android.R.string.ok, (d, w) -> doLoadState(slot))
+				.setNegativeButton(android.R.string.cancel, null)
+				.show();
+	}
+
+	private void doLoadState(int slot) {
+		Toast.makeText(this, R.string.state_loading, Toast.LENGTH_SHORT).show();
+		new Thread(() -> {
+			final int count = SaveSlotManager.restore(appName, slot);
+			runOnUiThread(() -> {
+				if (count < 0) {
+					Toast.makeText(this, R.string.state_failed, Toast.LENGTH_SHORT).show();
+				} else {
+					restartMidlet();
+				}
+			});
+		}, "LoadState").start();
+	}
+
+	/**
+	 * The emulated JVM cannot be rewound, but the MIDlet reads its data through a
+	 * fresh class loader on every launch, so restarting is enough to pick up the
+	 * restored files. The process is killed (like the normal exit does) and an
+	 * alarm relaunches the game a moment later.
+	 */
+	private void restartMidlet() {
+		Intent intent = new Intent(getIntent());
+		PendingIntent restart = PendingIntent.getActivity(this, 0, intent,
+				PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE);
+		AlarmManager alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
+		if (alarmManager != null) {
+			alarmManager.set(AlarmManager.ELAPSED_REALTIME,
+					SystemClock.elapsedRealtime() + 1500, restart);
+		}
+		MidletThread.destroyApp();
+	}
+
 	public void showExitConfirmation() {
 		AlertDialog.Builder alertBuilder = new AlertDialog.Builder(this);
 		alertBuilder.setTitle(R.string.CONFIRMATION_REQUIRED)
@@ -544,7 +633,11 @@ public class MicroActivity extends AppCompatActivity {
 	@Override
 	public boolean onOptionsItemSelected(@NonNull MenuItem item) {
 		int id = item.getItemId();
-		if (id == R.id.action_exit_midlet) {
+		if (id == R.id.action_save_state) {
+			showSaveStateDialog(true);
+		} else if (id == R.id.action_load_state) {
+			showSaveStateDialog(false);
+		} else if (id == R.id.action_exit_midlet) {
 			showExitConfirmation();
 		} else if (id == R.id.action_save_log) {
 			saveLog();

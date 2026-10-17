@@ -224,4 +224,14 @@
     <string name="shader_none_selected">当前没有加载着色器</string>
     <string name="global_keymap_title">全局按键映射</string>
     <string name="global_keymap_summary">对所有游戏生效；某个游戏单独设置过则以游戏的为准</string>
+    <string name="action_save_state">即时存档</string>
+    <string name="action_load_state">读取存档</string>
+    <string name="slot_empty">槽位 %1$d — 空</string>
+    <string name="slot_filled">槽位 %1$d — %2$s</string>
+    <string name="state_saving">正在存档…</string>
+    <string name="state_saved">已存入槽位 %1$d（%2$d 个文件）</string>
+    <string name="state_loading">正在读档，游戏即将重启…</string>
+    <string name="state_failed">操作失败</string>
+    <string name="state_load_confirm">读取槽位 %1$d 并重启游戏？\n\n当前进度会先备份到自动槽位，读错了可以找回。</string>
+    <string name="slot_empty_toast">槽位 %1$d 是空的</string>
 </resources>
