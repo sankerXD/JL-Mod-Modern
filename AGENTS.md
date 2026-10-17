@@ -1,5 +1,11 @@
 # AGENTS.md — 维护者工作笔记
 
+**已发布**：https://github.com/sankerXD/JL-Mod-Modern · v1.0.0（2024-10-18 发）
+- 分支 `modern` → 远端 `main`；上游基线 commit `724b90a0`（JL-Mod 0.87.1）
+- 版本：`versionName 1.0.0` / `versionCode 49`
+- Release 附件：`JL-Mod-Modern_1.0.0.apk`（用 `jlmod.keystore` 签名，密钥不入库）
+- 重新发版：改版本号 → `./gradlew assembleEmulatorRelease` → `git tag/gpush` → `gh release create --repo sankerXD/JL-Mod-Modern`
+
 > 这里记录本次改造的**全过程**：为什么这么改、踩过哪些坑、怎么回滚。
 > 面向维护者自己（也方便 AI 助手接手）。对外说明看 [README.md](JL-Mod-trigger/README.md)。
 
