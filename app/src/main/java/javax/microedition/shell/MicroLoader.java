@@ -21,6 +21,7 @@ import static android.os.Build.VERSION.SDK_INT;
 import static android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.os.Environment;
 import android.os.StrictMode;
@@ -29,6 +30,7 @@ import android.util.SparseIntArray;
 import android.view.KeyEvent;
 
 import androidx.core.content.ContextCompat;
+import androidx.preference.PreferenceManager;
 
 import org.acra.ACRA;
 import org.acra.ErrorReporter;
@@ -70,6 +72,7 @@ import kotlin.io.FilesKt;
 import ru.playsoftware.j2meloader.BuildConfig;
 import ru.playsoftware.j2meloader.config.Config;
 import ru.playsoftware.j2meloader.config.ProfileModel;
+import ru.playsoftware.j2meloader.config.ShaderList;
 import ru.playsoftware.j2meloader.config.ProfilesManager;
 import ru.playsoftware.j2meloader.config.ShaderInfo;
 import ru.playsoftware.j2meloader.util.AppUtils;
@@ -233,6 +236,57 @@ public class MicroLoader {
 		return params.orientation;
 	}
 
+	/**
+	 * Shader resolution:
+	 * a shader loaded for this particular game wins, otherwise the global one
+	 * (settings -> Shader) is used. Both are "loaded files": an ini descriptor
+	 * pointing to its fragment/vertex sources.
+	 */
+	private void applyShader() {
+		if (params.shader != null) {
+			// per-game shader, keep its own directory
+			return;
+		}
+		SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(
+				ContextHolder.getActivity().getApplicationContext());
+		String path = sp.getString(Constants.PREF_SHADER, null);
+		if (path == null || path.isEmpty()) {
+			return;
+		}
+		File file = new File(path);
+		String error = ShaderList.validate(file);
+		if (error != null) {
+			Log.w(TAG, "applyShader: " + error);
+			return;
+		}
+		params.shader = ShaderList.loadIni(file);
+	}
+
+	/**
+	 * The global "Scaling mode" setting overrides the per-game scale type.
+	 * Values stored in preferences are Canvas scale types: 0 = follow the
+	 * game profile, 1 = fit (keep ratio), 2 = stretch, 3 = integer scaling.
+	 */
+	private void applyGlobalScaleMode() {
+		SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(
+				ContextHolder.getActivity().getApplicationContext());
+		String value = sp.getString(Constants.PREF_SCALE_MODE, "0");
+		int mode;
+		try {
+			mode = value == null ? 0 : Integer.parseInt(value.trim());
+		} catch (NumberFormatException e) {
+			mode = 0;
+		}
+		if (mode == 0) {
+			return;
+		}
+		params.screenScaleType = mode;
+		if (mode == 3) {
+			// integer scaling looks best centered
+			params.screenGravity = 2;
+		}
+	}
+
 	void applyConfiguration() {
 		try {
 			// Apply configuration to the launching MIDlet
@@ -260,8 +314,10 @@ public class MicroLoader {
 
 			Displayable.setVirtualSize(params.screenWidth, params.screenHeight);
 			EventQueue.setImmediate(params.immediateMode);
+			applyGlobalScaleMode();
+			applyShader();
 			ShaderInfo shader = params.shader;
-			if (shader != null) {
+			if (shader != null && (shader.dir == null || shader.dir.isEmpty())) {
 				shader.dir = workDir + Config.SHADERS_DIR;
 			}
 			Canvas.setSettings(params);

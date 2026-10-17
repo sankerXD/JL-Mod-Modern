@@ -21,8 +21,8 @@ android {
         applicationId = "ru.woesss.j2meloader"
         minSdk = rootProject.extra["minSdk"] as Int
         targetSdk = rootProject.extra["targetSdk"] as Int
-        versionCode = 48
-        versionName = "0.87.1"
+        versionCode = 49
+        versionName = "1.0.0"
         resValue("string", "app_name", rootProject.name)
         resValue("string", "app_center", secret.getProperty("appCenterKey", ""))
         vectorDrawables.useSupportLibrary = true
@@ -90,13 +90,13 @@ android {
     }
 
     splits.abi {
-        isEnable = true
+        isEnable = false
         reset()
         include("x86", "armeabi-v7a", "x86_64", "arm64-v8a")
         isUniversalApk = true
     }
 
-    externalNativeBuild.ndkBuild.path("src/main/cpp/Android.mk")
+    // externalNativeBuild.ndkBuild.path("src/main/cpp/Android.mk")  // disabled: reuse prebuilt .so from the shipped APK
 
     compileOptions {
         targetCompatibility = JavaVersion.VERSION_17
@@ -152,6 +152,7 @@ dependencies {
     implementation("androidx.transition:transition:1.4.1")
     implementation("com.google.android.material:material:1.11.0")
     //noinspection GradleDependency (next version incompatible with Android 4)
+    implementation("androidx.drawerlayout:drawerlayout:1.2.0")
     implementation("com.google.oboe:oboe:1.7.0")
 
     implementation("ch.acra:acra-http:5.11.3")

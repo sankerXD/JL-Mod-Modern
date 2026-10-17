@@ -25,6 +25,7 @@ import android.content.Intent;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
 import android.net.Uri;
+import android.widget.Toast;
 import android.os.Bundle;
 import android.util.Log;
 
@@ -35,6 +36,7 @@ import androidx.core.os.LocaleListCompat;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
+import androidx.preference.PreferenceManager;
 
 import java.io.File;
 import java.util.Locale;
@@ -44,14 +46,22 @@ import ru.playsoftware.j2meloader.EmulatorApplication;
 import ru.playsoftware.j2meloader.R;
 import ru.playsoftware.j2meloader.config.Config;
 import ru.playsoftware.j2meloader.config.ProfilesActivity;
+import ru.playsoftware.j2meloader.config.ShaderInfo;
+import ru.playsoftware.j2meloader.config.ShaderList;
+import ru.playsoftware.j2meloader.util.Constants;
 import ru.playsoftware.j2meloader.util.FileUtils;
 import ru.playsoftware.j2meloader.util.PickDirResultContract;
+import ru.playsoftware.j2meloader.util.PickFileResultContract;
 import ru.playsoftware.j2meloader.util.XmlUtils;
 
 public class SettingsFragment extends PreferenceFragmentCompat {
 	private static final String TAG = "SettingsFragment";
 
 	private Preference prefFolder;
+	private Preference prefShader;
+	private final PickFileResultContract shaderPickerContract = new PickFileResultContract();
+	private final ActivityResultLauncher<String[]> shaderPicker =
+			registerForActivityResult(shaderPickerContract, this::onShaderPicked);
 	private final ActivityResultLauncher<String> openDirLauncher = registerForActivityResult(
 			new PickDirResultContract(),
 			this::onPickDirResult);
@@ -62,12 +72,124 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 		Objects.<Preference>requireNonNull(findPreference("pref_default_settings"))
 				.setIntent(new Intent(requireActivity(), ProfilesActivity.class));
 		initLanguages();
+		initShaders();
+		initGlobalKeyMap();
 		prefFolder = Objects.requireNonNull(findPreference(PREF_EMULATOR_DIR));
 		prefFolder.setSummary(Config.getEmulatorDir());
 		prefFolder.setOnPreferenceClickListener(preference -> {
 			openDirLauncher.launch(null);
 			return true;
 		});
+	}
+
+	private void initGlobalKeyMap() {
+		Preference pref = findPreference("pref_global_keymap");
+		if (pref == null) {
+			return;
+		}
+		pref.setOnPreferenceClickListener(p -> {
+			Intent intent = new Intent(requireActivity(), KeyMapperActivity.class);
+			intent.setData(Uri.parse("global"));
+			startActivity(intent);
+			return true;
+		});
+	}
+
+	private void initShaders() {
+		prefShader = findPreference(Constants.PREF_SHADER);
+		if (prefShader == null) {
+			return;
+		}
+		updateShaderSummary();
+		prefShader.setOnPreferenceClickListener(preference -> {
+			showShaderDialog();
+			return true;
+		});
+	}
+
+	/**
+	 * @return the shader stored in preferences, or null when nothing usable is loaded
+	 */
+	private ShaderInfo loadedShader() {
+		String path = getShaderPath();
+		if (path == null || path.isEmpty()) {
+			return null;
+		}
+		File file = new File(path);
+		if (!file.isFile()) {
+			// stale entry (e.g. old format) - forget it
+			saveShaderPath("");
+			return null;
+		}
+		return ShaderList.loadIni(file);
+	}
+
+	private void updateShaderSummary() {
+		ShaderInfo info = loadedShader();
+		if (info == null) {
+			prefShader.setSummary(R.string.pref_shader_off);
+			return;
+		}
+		String name = info.getName() == null ? "shader" : info.getName();
+		prefShader.setSummary(getString(R.string.pref_shader_global, name));
+	}
+
+	private String getShaderPath() {
+		return PreferenceManager.getDefaultSharedPreferences(requireContext())
+				.getString(Constants.PREF_SHADER, null);
+	}
+
+	private void showShaderDialog() {
+		ShaderInfo loaded = loadedShader();
+		String[] items = new String[]{
+				getString(R.string.pref_shader_off),
+				loaded == null ? getString(R.string.pref_shader_load)
+						: getString(R.string.pref_shader_global,
+						loaded.getName() == null ? "shader" : loaded.getName())
+		};
+		new AlertDialog.Builder(requireActivity())
+				.setTitle(R.string.pref_shader_title)
+				.setItems(items, (dialog, which) -> {
+					if (which == 0) {
+						saveShaderPath("");
+					} else {
+						pickShaderFile();
+					}
+				})
+				.setNegativeButton(android.R.string.cancel, null)
+				.show();
+	}
+
+	private void pickShaderFile() {
+		shaderPickerContract.setStartPath(Config.getEmulatorDir() + Config.SHADERS_DIR);
+		shaderPicker.launch(new String[]{".ini"});
+	}
+
+	private void onShaderPicked(Uri uri) {
+		if (uri == null || uri.getPath() == null) {
+			return;
+		}
+		File file = new File(uri.getPath());
+		String error = ShaderList.validate(file);
+		if (error != null) {
+			new AlertDialog.Builder(requireActivity())
+					.setTitle(R.string.shader_load_failed)
+					.setMessage(error)
+					.setPositiveButton(android.R.string.ok, null)
+					.show();
+			return;
+		}
+		saveShaderPath(file.getAbsolutePath());
+		ShaderInfo info = ShaderList.loadIni(file);
+		Toast.makeText(requireActivity(),
+				getString(R.string.shader_loaded, info == null ? file.getName() : info.getName()),
+				Toast.LENGTH_SHORT).show();
+	}
+
+	private void saveShaderPath(String path) {
+		PreferenceManager.getDefaultSharedPreferences(requireContext())
+				.edit().putString(Constants.PREF_SHADER, path).apply();
+		updateShaderSummary();
 	}
 
 	private void initLanguages() {

@@ -385,6 +385,26 @@ public abstract class Canvas extends Displayable {
 					scaleRatio = 100;
 				}
 			}
+			case 3 -> {
+				// integer scaling: enlarge by a whole number so that every game
+				// pixel covers exactly N screen pixels; centered by the caller
+				int factor = Math.min(scaledDisplayWidth / width, scaledDisplayHeight / height);
+				if (factor >= 1) {
+					onWidth = width * factor;
+					onHeight = height * factor;
+				} else {
+					// canvas is bigger than the screen area - just fit it
+					onWidth = scaledDisplayWidth;
+					onHeight = height * scaledDisplayWidth / width;
+					if (onHeight > scaledDisplayHeight) {
+						onHeight = scaledDisplayHeight;
+						onWidth = width * scaledDisplayHeight / height;
+					}
+				}
+				if (scaleRatio > 100) {
+					scaleRatio = 100;
+				}
+			}
 		}
 
 		onWidth = onWidth * scaleRatio / 100;

@@ -259,4 +259,23 @@
     <string name="virtual_key_up" translatable="false">↑</string>
     <string name="warn_install_from_net">File will be downloaded from Internet</string>
     <string name="warning">Warning!</string>
+    <string name="pref_scale_mode_title">Scaling mode</string>
+    <string name="pref_scale_mode_summary">Global, applies to all games and overrides the per-game scale type</string>
+    <string name="pref_scale_mode_follow">Follow game profile</string>
+    <string name="pref_scale_mode_stretch">Stretch to full screen</string>
+    <string name="pref_scale_mode_integer">Integer scaling</string>
+    <string name="pref_scale_mode_fit">Fit to screen edge (keep ratio)</string>
+    <string name="pref_shader_title">Shader (filter)</string>
+    <string name="pref_shader_follow">Follow game profile</string>
+    <string name="pref_shader_off">Off (no filter)</string>
+    <string name="pref_shader_empty">No shaders found in %1$s</string>
+    <string name="pref_shader_global">Global: %1$s</string>
+    <string name="pref_shader_load">Global: load a shader file…</string>
+    <string name="shader_load_failed">Shader not loaded</string>
+    <string name="shader_loaded">Shader loaded: %1$s</string>
+    <string name="shader_follow_global">Follow global shader</string>
+    <string name="shader_load_file">Load a shader file…</string>
+    <string name="shader_none_selected">No shader loaded</string>
+    <string name="global_keymap_title">Global key mapping</string>
+    <string name="global_keymap_summary">Applies to every game; a game with its own mapping overrides it</string>
 </resources>

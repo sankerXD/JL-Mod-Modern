@@ -26,6 +26,7 @@ import static ru.playsoftware.j2meloader.util.Constants.PREF_DEFAULT_PROFILE;
 
 import android.annotation.SuppressLint;
 import android.content.Intent;
+import android.net.Uri;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -47,14 +48,16 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
+import android.widget.Toast;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.Spinner;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.activity.result.ActivityResultLauncher;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.ListPopupWindow;
@@ -65,6 +68,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -78,6 +82,8 @@ import kotlin.io.FilesKt;
 import ru.playsoftware.j2meloader.R;
 import ru.playsoftware.j2meloader.config.model.Size;
 import ru.playsoftware.j2meloader.databinding.ActivityConfigBinding;
+import ru.playsoftware.j2meloader.util.PickFileResultContract;
+import ru.playsoftware.j2meloader.util.SparseIntArrayAdapter;
 import ru.playsoftware.j2meloader.settings.KeyMapperActivity;
 import ru.playsoftware.j2meloader.util.FileUtils;
 import ru.playsoftware.j2meloader.util.ViewUtils;
@@ -98,7 +104,16 @@ public class ConfigActivity extends AppCompatActivity implements View.OnClickLis
 	private Display display;
 	private File configDir;
 	private String defProfile;
+	@Nullable
 	private ArrayList<ShaderInfo> shaders;
+	private final List<ShaderInfo> shaderItems = new ArrayList<>();
+	private boolean shaderUiUpdating;
+	private ShaderInfo selectedShader;
+	private boolean shaderRowVisible = true;
+	private boolean shaderModified;
+	private final PickFileResultContract shaderPickerContract = new PickFileResultContract();
+	private final ActivityResultLauncher<String[]> shaderPicker =
+			registerForActivityResult(shaderPickerContract, this::onShaderPicked);
 	private String workDir;
 	private boolean needShow;
 	private ActivityConfigBinding binding;
@@ -189,6 +204,7 @@ public class ConfigActivity extends AppCompatActivity implements View.OnClickLis
 		binding.cmdVKOutline.setOnClickListener(this);
 		binding.btEncoding.setOnClickListener(this::showCharsetPicker);
 		binding.btShaderTune.setOnClickListener(this::showShaderSettings);
+		binding.spShader.setOnClickListener(v -> showShaderDialog());
 		binding.tfScaleRatioValue.addTextChangedListener(new TextWatcher() {
 			@Override
 			public void beforeTextChanged(CharSequence s, int start, int count, int after) {
@@ -223,45 +239,17 @@ public class ConfigActivity extends AppCompatActivity implements View.OnClickLis
 				switch (position) {
 					case 0, 3 -> {
 						binding.cxParallel.setVisibility(View.VISIBLE);
-						binding.shaderContainer.setVisibility(View.GONE);
+						setShaderRowVisible(false);
 					}
 					case 1 -> {
 						binding.cxParallel.setVisibility(View.GONE);
-						binding.shaderContainer.setVisibility(View.VISIBLE);
+						setShaderRowVisible(true);
 						initShaderSpinner();
 					}
 					case 2 -> {
 						binding.cxParallel.setVisibility(View.GONE);
-						binding.shaderContainer.setVisibility(View.GONE);
+						setShaderRowVisible(false);
 					}
-				}
-			}
-
-			@Override
-			public void onNothingSelected(AdapterView<?> parent) {
-			}
-		});
-		binding.spShader.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-			@Override
-			public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-				ShaderInfo item = (ShaderInfo) parent.getItemAtPosition(position);
-				ShaderInfo.Setting[] settings = item.settings;
-				float[] values = item.values;
-				if (values == null) {
-					for (int i = 0; i < 4; i++) {
-						if (settings[i] != null) {
-							if (values == null) {
-								values = new float[4];
-							}
-							values[i] = settings[i].def;
-						}
-					}
-				}
-				if (values == null) {
-					binding.btShaderTune.setVisibility(View.GONE);
-				} else {
-					item.values = values;
-					binding.btShaderTune.setVisibility(View.VISIBLE);
 				}
 			}
 
@@ -393,72 +381,95 @@ public class ConfigActivity extends AppCompatActivity implements View.OnClickLis
 	}
 
 	private void showShaderSettings(View v) {
-		ShaderInfo shader = (ShaderInfo) binding.spShader.getSelectedItem();
-		params.shader = shader;
+		ShaderInfo shader = selectedShader;
+		if (shader == null) {
+			Toast.makeText(this, R.string.shader_none_selected, Toast.LENGTH_SHORT).show();
+			return;
+		}
 		ShaderTuneAlert.newInstance(shader).show(getSupportFragmentManager(), "ShaderTuning");
 	}
 
 	private void initShaderSpinner() {
-		if (shaders != null) {
-			return;
-		}
 		File dir = new File(workDir + Config.SHADERS_DIR);
 		if (!dir.exists()) {
 			//noinspection ResultOfMethodCallIgnored
 			dir.mkdirs();
 		}
-		shaders = new ArrayList<>();
-		ArrayAdapter<ShaderInfo> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, shaders);
-		adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-		binding.spShader.setAdapter(adapter);
-		String[] files = dir.list();
-		if (files != null) {
-			for (String fileName : files) {
-				if (!TextUtils.endsWithIgnoreCase(fileName, ".ini")) {
-					continue;
-				}
-				File file = new File(dir, fileName);
-				String text;
-				try {
-					//noinspection CharsetObjectCanBeUsed
-					text = FilesKt.readText(file, Charset.forName("UTF-8"));
-				} catch (Exception e) {
-					Log.e(TAG, "getText: " + file, e);
-					continue;
-				}
+		selectedShader = params.shader;
+		refreshShaderSpinner();
+	}
 
-				String[] split = text.split("[\\n\\r]+");
-				ShaderInfo info = null;
-				for (String line : split) {
-					if (line.startsWith("[")) {
-						if (info != null && info.fragment != null && info.vertex != null) {
-							shaders.add(info);
-						}
-						info = new ShaderInfo(line.replaceAll("[\\[\\]]", ""), "unknown");
-					} else if (info != null) {
-						try {
-							info.set(line);
-						} catch (Exception e) {
-							Log.e(TAG, "initShaderSpinner: ", e);
-						}
+	private void showShaderDialog() {
+		final ArrayList<String> items = new ArrayList<>();
+		items.add(getString(R.string.shader_follow_global));
+		if (selectedShader != null) {
+			String name = selectedShader.getName();
+			items.add(name == null ? new File(selectedShader.fragment).getName() : name);
+		}
+		items.add(getString(R.string.shader_load_file));
+		new AlertDialog.Builder(this)
+				.setTitle(R.string.PREF_SHADER_FILTER)
+				.setItems(items.toArray(new String[0]), (dialog, which) -> {
+					if (which == 0) {
+						selectedShader = null;
+						shaderModified = true;
+						params.shader = null;
+						refreshShaderSpinner();
+					} else if (which == items.size() - 1) {
+						pickShaderFile();
 					}
-				}
-				if (info != null && info.fragment != null && info.vertex != null) {
-					shaders.add(info);
-				}
-			}
-			Collections.sort(shaders);
+					// selecting the already loaded shader keeps it
+				})
+				.show();
+	}
+
+	private void refreshShaderSpinner() {
+		if (selectedShader == null) {
+			binding.spShader.setText(R.string.shader_follow_global);
+		} else {
+			String name = selectedShader.getName();
+			binding.spShader.setText(name == null ? new File(selectedShader.fragment).getName() : name);
 		}
-		shaders.add(0, new ShaderInfo(getString(R.string.identity_filter), "woesss"));
-		adapter.notifyDataSetChanged();
-		ShaderInfo selected = params.shader;
-		if (selected != null) {
-			int position = shaders.indexOf(selected);
-			if (position > 0) {
-				shaders.get(position).values = selected.values;
-				binding.spShader.setSelection(position);
-			}
+		setShaderRowVisible(shaderRowVisible);
+	}
+
+	private void setShaderRowVisible(boolean visible) {
+		shaderRowVisible = visible;
+		int rowVisibility = visible ? View.VISIBLE : View.GONE;
+		binding.tvShaderTitle.setVisibility(rowVisibility);
+		binding.spShader.setVisibility(rowVisibility);
+		binding.btShaderTune.setVisibility(
+				visible && selectedShader != null ? View.VISIBLE : View.GONE);
+	}
+
+	private void pickShaderFile() {
+		shaderPickerContract.setStartPath(workDir + Config.SHADERS_DIR);
+		shaderPicker.launch(new String[]{".ini"});
+	}
+
+	private void onShaderPicked(Uri uri) {
+		if (uri == null || uri.getPath() == null) {
+			refreshShaderSpinner();
+			return;
 		}
+		File file = new File(uri.getPath());
+		String error = ShaderList.validate(file);
+		if (error != null) {
+			refreshShaderSpinner();
+			new AlertDialog.Builder(this)
+					.setTitle(R.string.shader_load_failed)
+					.setMessage(error)
+					.setPositiveButton(android.R.string.ok, null)
+					.show();
+			return;
+		}
+		selectedShader = ShaderList.loadIni(file);
+		shaderModified = true;
+		params.shader = selectedShader;
+		refreshShaderSpinner();
+		Toast.makeText(this, getString(R.string.shader_loaded,
+				params.shader == null ? file.getName() : params.shader.getName()),
+				Toast.LENGTH_SHORT).show();
 	}
 
 	private void showCharsetPicker(View v) {
@@ -533,9 +544,13 @@ public class ConfigActivity extends AppCompatActivity implements View.OnClickLis
 		screenPresets.add(new Size(128, 128));
 		screenPresets.add(new Size(128, 160));
 		screenPresets.add(new Size(132, 176));
+		screenPresets.add(new Size(176, 208));
 		screenPresets.add(new Size(176, 220));
 		screenPresets.add(new Size(240, 320));
+		screenPresets.add(new Size(240, 400));
+		screenPresets.add(new Size(320, 240));
 		screenPresets.add(new Size(352, 416));
+		screenPresets.add(new Size(360, 640));
 		screenPresets.add(new Size(640, 360));
 		screenPresets.add(new Size(800, 480));
 
@@ -576,6 +591,14 @@ public class ConfigActivity extends AppCompatActivity implements View.OnClickLis
 	public void loadParams(boolean reloadFromFile) {
 		if (reloadFromFile) {
 			loadConfig();
+			if (shaderModified) {
+				// the config was just reloaded from disk (e.g. returning from the
+				// file picker), keep what the user picked in this session
+				params.shader = selectedShader;
+			}
+		}
+		if (!shaderModified) {
+			selectedShader = params.shader;
 		}
 		int screenWidth = params.screenWidth;
 		if (screenWidth != 0) {
@@ -597,15 +620,7 @@ public class ConfigActivity extends AppCompatActivity implements View.OnClickLis
 		binding.cxParallel.setChecked(params.parallelRedrawScreen);
 		binding.cxForceFullscreen.setChecked(params.forceFullscreen);
 		binding.spGraphicsMode.setSelection(params.graphicsMode);
-		if (shaders != null) {
-			int position = shaders.indexOf(params.shader);
-			if (position > 0) {
-				shaders.get(position).values =  params.shader.values;
-				binding.spShader.setSelection(position);
-			} else {
-				binding.spShader.setSelection(0);
-			}
-		}
+		refreshShaderSpinner();
 		binding.cxShowFps.setChecked(params.showFps);
 
 		binding.tfFontSizeSmall.setText(Integer.toString(params.fontSizeSmall));
@@ -680,12 +695,7 @@ public class ConfigActivity extends AppCompatActivity implements View.OnClickLis
 			params.immediateMode = binding.cxImmediate.isChecked();
 			int mode = binding.spGraphicsMode.getSelectedItemPosition();
 			params.graphicsMode = mode;
-			if (mode == 1) {
-				if (binding.spShader.getSelectedItemPosition() == 0)
-					params.shader = null;
-				else
-					params.shader = (ShaderInfo) binding.spShader.getSelectedItem();
-			}
+			// params.shader is maintained by the shader spinner listener
 			params.parallelRedrawScreen = binding.cxParallel.isChecked();
 			params.forceFullscreen = binding.cxForceFullscreen.isChecked();
 			params.showFps = binding.cxShowFps.isChecked();

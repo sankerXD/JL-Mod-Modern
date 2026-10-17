@@ -43,11 +43,13 @@ import java.io.File;
 
 import javax.microedition.lcdui.Canvas;
 import javax.microedition.lcdui.keyboard.KeyMapper;
+import javax.microedition.lcdui.keyboard.TriggerAxisHandler;
 
 import ru.playsoftware.j2meloader.R;
 import ru.playsoftware.j2meloader.config.ProfileModel;
 import ru.playsoftware.j2meloader.config.ProfilesManager;
 import ru.playsoftware.j2meloader.databinding.ActivityKeymapperBinding;
+import ru.playsoftware.j2meloader.util.GlobalKeyMap;
 import ru.playsoftware.j2meloader.util.SparseIntArrayAdapter;
 
 public class KeyMapperActivity extends AppCompatActivity implements View.OnClickListener {
@@ -57,6 +59,7 @@ public class KeyMapperActivity extends AppCompatActivity implements View.OnClick
 	private final Rect popupRect = new Rect();
 	private SparseIntArray androidToMIDP;
 	private ProfileModel params;
+	private boolean globalMode;
 	private int canvasKey;
 	private ActivityKeymapperBinding binding;
 
@@ -65,6 +68,7 @@ public class KeyMapperActivity extends AppCompatActivity implements View.OnClick
 		super.onCreate(savedInstanceState);
 		Intent intent = getIntent();
 		String path = intent.getDataString();
+		globalMode = "global".equals(path);
 		if (path == null) {
 			Toast.makeText(this, "Error", Toast.LENGTH_SHORT).show();
 			finish();
@@ -75,9 +79,14 @@ public class KeyMapperActivity extends AppCompatActivity implements View.OnClick
 		ActionBar actionBar = getSupportActionBar();
 		if (actionBar != null) {
 			actionBar.setDisplayHomeAsUpEnabled(true);
-			actionBar.setTitle(R.string.pref_map_keys);
+			actionBar.setTitle(globalMode ? R.string.global_keymap_title : R.string.pref_map_keys);
 		}
-		params = ProfilesManager.loadConfig(new File(path));
+		if (globalMode) {
+			params = new ProfileModel();
+			params.keyMappings = GlobalKeyMap.load(this);
+		} else {
+			params = ProfilesManager.loadConfig(new File(path));
+		}
 
 		setupButton(binding.virtualKeyLeftSoft, Canvas.KEY_SOFT_LEFT);
 		setupButton(binding.virtualKeyRightSoft, Canvas.KEY_SOFT_RIGHT);
@@ -210,7 +219,11 @@ public class KeyMapperActivity extends AppCompatActivity implements View.OnClick
 		}
 		if (!equalMaps(oldMap, newMap)) {
 			params.keyMappings = newMap;
-			ProfilesManager.saveConfig(params);
+			if (globalMode) {
+				GlobalKeyMap.save(this, newMap);
+			} else {
+				ProfilesManager.saveConfig(params);
+			}
 		}
 	}
 
@@ -240,6 +253,17 @@ public class KeyMapperActivity extends AppCompatActivity implements View.OnClick
 			}
 		}
 		return true;
+	}
+
+	private final TriggerAxisHandler triggerAxes = new TriggerAxisHandler();
+
+	// L2/R2 arrive as analog axes, convert them so they can be assigned here too
+	@Override
+	public boolean dispatchGenericMotionEvent(MotionEvent event) {
+		if (triggerAxes.handle(this, event)) {
+			return true;
+		}
+		return super.dispatchGenericMotionEvent(event);
 	}
 
 	@Override

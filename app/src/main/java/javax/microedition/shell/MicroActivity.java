@@ -37,15 +37,20 @@ import android.text.TextUtils;
 import android.text.method.DigitsKeyListener;
 import android.util.TypedValue;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
+import android.widget.PopupMenu;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.SubMenu;
 import android.view.Surface;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
@@ -55,6 +60,7 @@ import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
+import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.appcompat.widget.AppCompatCheckBox;
 import androidx.preference.PreferenceManager;
 
@@ -74,6 +80,7 @@ import javax.microedition.lcdui.Displayable;
 import javax.microedition.lcdui.Form;
 import javax.microedition.lcdui.ViewHandler;
 import javax.microedition.lcdui.event.SimpleEvent;
+import javax.microedition.lcdui.keyboard.TriggerAxisHandler;
 import javax.microedition.lcdui.keyboard.VirtualKeyboard;
 import javax.microedition.lcdui.skin.SkinLayer;
 import javax.microedition.util.ContextHolder;
@@ -97,6 +104,8 @@ public class MicroActivity extends AppCompatActivity {
 	private Displayable current;
 	private boolean visible;
 	private boolean actionBarEnabled;
+	private DrawerLayout drawerLayout;
+	private LinearLayout drawerItems;
 	private boolean statusBarEnabled;
 	private MicroLoader microLoader;
 	private String appName;
@@ -119,6 +128,10 @@ public class MicroActivity extends AppCompatActivity {
 		statusBarEnabled = sp.getBoolean(PREF_STATUSBAR, false);
 		if (sp.getBoolean(PREF_KEEP_SCREEN, false)) {
 			getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+		}
+		if (!statusBarEnabled) {
+			// window level flag: unlike SYSTEM_UI_FLAG_* it survives drawer gestures
+			getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
 		}
 		ContextHolder.setVibration(sp.getBoolean(PREF_VIBRATION, true));
 		Canvas.setScreenshotRawMode(sp.getBoolean(PREF_SCREENSHOT_SWITCH, false));
@@ -173,6 +186,7 @@ public class MicroActivity extends AppCompatActivity {
 		setOrientation(orientation);
 		menuKey = microLoader.getMenuKeyCode();
 		inputMethodManager = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+		setupMenuDrawer();
 
 		getOnBackPressedDispatcher().addCallback(new OnBackPressedCallback(true) {
 			@Override
@@ -202,6 +216,7 @@ public class MicroActivity extends AppCompatActivity {
 	@Override
 	public void onPause() {
 		visible = false;
+		triggerAxes.release(this);
 		hideSoftInput();
 		MidletThread.pauseApp();
 		super.onPause();
@@ -349,6 +364,16 @@ public class MicroActivity extends AppCompatActivity {
 		alertBuilder.create().show();
 	}
 
+	private final TriggerAxisHandler triggerAxes = new TriggerAxisHandler();
+
+	@Override
+	public boolean dispatchGenericMotionEvent(MotionEvent event) {
+		if (triggerAxes.handle(this, event)) {
+			return true;
+		}
+		return super.dispatchGenericMotionEvent(event);
+	}
+
 	@Override
 	public boolean dispatchKeyEvent(KeyEvent event) {
 		if (event.getKeyCode() == KeyEvent.KEYCODE_MENU)
@@ -369,11 +394,92 @@ public class MicroActivity extends AppCompatActivity {
 
 	@Override
 	public void openOptionsMenu() {
-		if (!actionBarEnabled &&
-				Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && current instanceof Canvas) {
-			showSystemUI();
+		if (drawerLayout != null) {
+			drawerLayout.openDrawer(binding.menuDrawer);
+			return;
 		}
 		super.openOptionsMenu();
+	}
+
+	/**
+	 * Builds the left-edge drawer from the same menu resource as the old
+	 * action bar, so the entries behave (and toggle) exactly as before.
+	 */
+	private void setupMenuDrawer() {
+		drawerLayout = binding.drawerLayout;
+		drawerItems = binding.menuDrawerItems;
+		drawerLayout.setScrimColor(0x99000000);
+		drawerLayout.addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
+			@Override
+			public void onDrawerSlide(@NonNull View drawerView, float slideOffset) {
+				if (current instanceof Canvas) {
+					hideSystemUI();
+				}
+			}
+
+			@Override
+			public void onDrawerOpened(@NonNull View drawerView) {
+				if (current instanceof Canvas) {
+					hideSystemUI();
+				}
+			}
+		});
+		PopupMenu popup = new PopupMenu(this, binding.displayableContainer);
+		Menu menu = popup.getMenu();
+		onCreateOptionsMenu(menu);
+		fillDrawerItems(menu);
+	}
+
+	private void fillDrawerItems(Menu menu) {
+		drawerItems.removeAllViews();
+		for (int i = 0, size = menu.size(); i < size; i++) {
+			MenuItem item = menu.getItem(i);
+			if (!item.isVisible()) {
+				continue;
+			}
+			if (item.hasSubMenu()) {
+				addDrawerHeader(item.getTitle());
+				SubMenu subMenu = item.getSubMenu();
+				if (subMenu != null) {
+					for (int j = 0, count = subMenu.size(); j < count; j++) {
+						MenuItem subItem = subMenu.getItem(j);
+						if (subItem.isVisible()) {
+							addDrawerItem(subItem, true);
+						}
+					}
+				}
+			} else {
+				addDrawerItem(item, false);
+			}
+		}
+	}
+
+	private void addDrawerHeader(CharSequence title) {
+		TextView header = new TextView(this);
+		header.setText(title);
+		header.setTextAppearance(this, android.R.style.TextAppearance_Small);
+		int pad = (int) (getResources().getDisplayMetrics().density * 12);
+		header.setPadding(pad * 2, pad * 2, pad, pad / 2);
+		drawerItems.addView(header);
+	}
+
+	private void addDrawerItem(MenuItem item, boolean indented) {
+		TextView row = new TextView(this);
+		row.setText(item.getTitle());
+		row.setTextAppearance(this, android.R.style.TextAppearance_Medium);
+		row.setBackgroundResource(android.R.drawable.list_selector_background);
+		int pad = (int) (getResources().getDisplayMetrics().density * 12);
+		row.setPadding(indented ? pad * 2 : pad * 2, pad, pad, pad);
+		row.setClickable(true);
+		row.setFocusable(true);
+		row.setOnClickListener(v -> {
+			drawerLayout.closeDrawers();
+			if (item.isCheckable()) {
+				item.setChecked(!item.isChecked());
+			}
+			onOptionsItemSelected(item);
+		});
+		drawerItems.addView(row);
 	}
 
 	@Override
@@ -676,29 +782,22 @@ public class MicroActivity extends AppCompatActivity {
 				current.clearDisplayableView();
 			}
 			binding.displayableContainer.removeAllViews();
-			ActionBar actionBar = Objects.requireNonNull(getSupportActionBar());
-			LinearLayout.LayoutParams layoutParams = (LinearLayout.LayoutParams) binding.toolbar.getLayoutParams();
-			int toolbarHeight = 0;
+			// the top action bar is gone for good: it only stole vertical space
+			// from the game screen, the menu now lives in the left edge drawer
+			ActionBar actionBar = getSupportActionBar();
+			if (actionBar != null) {
+				actionBar.hide();
+			}
 			if (next instanceof Canvas) {
 				hideSystemUI();
-				if (!actionBarEnabled) {
-					actionBar.hide();
-				} else {
-					final String title = next.getTitle();
-					actionBar.setTitle(title == null ? appName : title);
-					toolbarHeight = (int) (getToolBarHeight() / 1.5);
-					layoutParams.height = toolbarHeight;
-				}
 			} else {
 				showSystemUI();
-				actionBar.show();
-				final String title = next != null ? next.getTitle() : null;
-				actionBar.setTitle(title == null ? appName : title);
-				toolbarHeight = (int) getToolBarHeight();
-				layoutParams.height = toolbarHeight;
 			}
-			binding.overlay.setLocation(0, toolbarHeight);
-			binding.toolbar.setLayoutParams(layoutParams);
+			final String title = next != null ? next.getTitle() : null;
+			if (drawerLayout != null) {
+				binding.menuDrawerTitle.setText(title == null ? appName : title);
+			}
+			binding.overlay.setLocation(0, 0);
 			if (next != null) {
 				binding.displayableContainer.addView(next.getDisplayableView());
 			}

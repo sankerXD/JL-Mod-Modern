@@ -205,4 +205,23 @@
     <string name="version">版本: </string>
     <string name="warn_install_from_net">将从互联网下载文件</string>
     <string name="warning">警告</string>
+    <string name="pref_scale_mode_title">倍率缩放</string>
+    <string name="pref_scale_mode_summary">全局生效，覆盖每个游戏自己的缩放设置</string>
+    <string name="pref_scale_mode_follow">跟随游戏设置</string>
+    <string name="pref_scale_mode_stretch">全屏拉伸</string>
+    <string name="pref_scale_mode_integer">整数缩放</string>
+    <string name="pref_scale_mode_fit">短边缩放</string>
+    <string name="pref_shader_title">着色器（滤镜）</string>
+    <string name="pref_shader_follow">跟随游戏设置</string>
+    <string name="pref_shader_off">关闭（无滤镜）</string>
+    <string name="pref_shader_empty">在 %1$s 里没有找到着色器</string>
+    <string name="pref_shader_global">全局：%1$s</string>
+    <string name="pref_shader_load">全局：加载着色器文件…</string>
+    <string name="shader_load_failed">着色器加载失败</string>
+    <string name="shader_loaded">已加载着色器：%1$s</string>
+    <string name="shader_follow_global">跟随全局着色器</string>
+    <string name="shader_load_file">加载着色器文件…</string>
+    <string name="shader_none_selected">当前没有加载着色器</string>
+    <string name="global_keymap_title">全局按键映射</string>
+    <string name="global_keymap_summary">对所有游戏生效；某个游戏单独设置过则以游戏的为准</string>
 </resources>

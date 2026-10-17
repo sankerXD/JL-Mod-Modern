@@ -22,14 +22,20 @@ import com.nononsenseapps.filepicker.AbstractFilePickerActivity;
 import com.nononsenseapps.filepicker.AbstractFilePickerFragment;
 
 import java.io.File;
+import java.util.Arrays;
 
 public class FilteredFilePickerActivity extends AbstractFilePickerActivity<File> {
+	public static final String EXTRA_EXTENSIONS = "ru.playsoftware.j2meloader.EXTRA_EXTENSIONS";
 
 	@Override
 	protected AbstractFilePickerFragment<File> getFragment(@Nullable String startPath, int mode, boolean allowMultiple,
 														   boolean allowCreateDir, boolean allowExistingFile, boolean singleClick) {
 		FilteredFilePickerFragment fragment = new FilteredFilePickerFragment();
 		fragment.setArgs(startPath, mode, allowMultiple, allowCreateDir, allowExistingFile, singleClick);
+		String[] extensions = getIntent().getStringArrayExtra(EXTRA_EXTENSIONS);
+		if (extensions != null) {
+			fragment.setExtensions(Arrays.asList(extensions));
+		}
 		return fragment;
 	}
 }

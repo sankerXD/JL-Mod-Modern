@@ -28,6 +28,24 @@
         android:key="pref_statusbar_switch"
         android:summary="@string/pref_enable_actionbar_summary"
         android:title="@string/pref_enable_statusbar_title" />
+    <Preference
+        android:icon="@drawable/ic_setting_keymap"
+        android:key="pref_global_keymap"
+        android:summary="@string/global_keymap_summary"
+        android:title="@string/global_keymap_title" />
+    <Preference
+        android:icon="@drawable/ic_setting_shader"
+        android:key="pref_shader"
+        android:summary="@string/pref_shader_off"
+        android:title="@string/pref_shader_title" />
+    <ListPreference
+        android:defaultValue="0"
+        android:entries="@array/pref_scale_mode_entries"
+        android:entryValues="@array/pref_scale_mode_values"
+        android:icon="@drawable/ic_setting_scale"
+        android:key="pref_scale_mode"
+        android:summary="@string/pref_scale_mode_summary"
+        android:title="@string/pref_scale_mode_title" />
     <SwitchPreferenceCompat
         android:defaultValue="false"
         android:icon="@drawable/ic_setting_keep_screen_on"

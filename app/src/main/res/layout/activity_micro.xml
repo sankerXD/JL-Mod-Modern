@@ -1,39 +1,83 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:id="@+id/midletFrame"
+    android:id="@+id/drawer_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context="javax.microedition.shell.MicroActivity">
 
-    <LinearLayout
-        android:id="@+id/virtual_display"
+    <!-- MUST be transparent and math root container -->
+    <FrameLayout
+        android:id="@+id/midletFrame"
         android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:id="@+id/virtual_display"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+            <!-- kept for the options-menu infrastructure, never shown -->
+            <androidx.appcompat.widget.Toolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:background="?attr/colorPrimary"
+                android:descendantFocusability="blocksDescendants"
+                android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
+                android:visibility="gone"
+                app:popupTheme="@style/AppTheme.NoActionBar"
+                tools:title="MIDlet Title" />
+
+            <FrameLayout
+                android:id="@+id/displayable_container"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+        <javax.microedition.lcdui.overlay.OverlayView
+            android:id="@+id/overlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
+
+    <!-- left edge swipe drawer: replaces the top action bar -->
+    <LinearLayout
+        android:id="@+id/menu_drawer"
+        android:layout_width="280dp"
         android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:background="?android:attr/colorBackground"
+        android:elevation="16dp"
+        android:fitsSystemWindows="true"
         android:orientation="vertical">
 
-        <androidx.appcompat.widget.Toolbar
-            android:id="@+id/toolbar"
+        <TextView
+            android:id="@+id/menu_drawer_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="?attr/colorPrimary"
-            android:descendantFocusability="blocksDescendants"
-            android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
-            app:popupTheme="@style/AppTheme.NoActionBar"
-            tools:title="MIDlet Title" />
+            android:paddingStart="20dp"
+            android:paddingTop="20dp"
+            android:paddingEnd="20dp"
+            android:paddingBottom="12dp"
+            android:textAppearance="?android:textAppearanceMedium"
+            android:textStyle="bold"
+            tools:text="MIDlet Title" />
 
-        <FrameLayout
-            android:id="@+id/displayable_container"
+        <ScrollView
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1" />
+            android:layout_weight="1">
+
+            <LinearLayout
+                android:id="@+id/menu_drawer_items"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="16dp" />
+        </ScrollView>
     </LinearLayout>
-
-    <!-- MUST be transparent and math root container -->
-    <javax.microedition.lcdui.overlay.OverlayView
-        android:id="@+id/overlay"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent" />
-
-</FrameLayout>
+</androidx.drawerlayout.widget.DrawerLayout>

@@ -28,6 +28,8 @@ import androidx.collection.SparseArrayCompat;
 import java.util.List;
 
 import ru.playsoftware.j2meloader.config.ProfileModel;
+import ru.playsoftware.j2meloader.util.GlobalKeyMap;
+import javax.microedition.util.ContextHolder;
 
 public class KeyMapper {
 	public static final int KEY_OPTIONS_MENU = 0;
@@ -173,14 +175,24 @@ public class KeyMapper {
 	public static void setKeyMapping(ProfileModel params) {
 		layoutType = params.keyCodesLayout;
 		SparseIntArray map = getDefaultKeyMap();
+		// 1) global mapping (Settings -> Global key mapping)
+		SparseIntArray globalMap = GlobalKeyMap.load(ContextHolder.getActivity());
+		if (globalMap != null) {
+			merge(map, globalMap);
+		}
+		// 2) per-game mapping wins over the global one
 		SparseIntArray customKeyMap = params.keyMappings;
 		if (customKeyMap != null) {
-			for (int i = 0, size = customKeyMap.size(); i < size; i++) {
-				map.put(customKeyMap.keyAt(i), customKeyMap.valueAt(i));
-			}
+			merge(map, customKeyMap);
 		}
 		androidToMIDP = map;
 		remapKeys(params);
+	}
+
+	private static void merge(SparseIntArray target, SparseIntArray source) {
+		for (int i = 0, size = source.size(); i < size; i++) {
+			target.put(source.keyAt(i), source.valueAt(i));
+		}
 	}
 
 	public static int getKeyCode(int gameAction) {
@@ -224,6 +236,15 @@ public class KeyMapper {
 		map.append(KeyEvent.KEYCODE_DPAD_RIGHT, KEY_RIGHT);
 		map.append(KeyEvent.KEYCODE_ENTER, KEY_FIRE);
 		map.append(KeyEvent.KEYCODE_DEL, KEY_CLEAR);
+		// gamepad: works out of the box on handhelds, still editable per game
+		map.append(KeyEvent.KEYCODE_BUTTON_A, KEY_FIRE);
+		map.append(KeyEvent.KEYCODE_BUTTON_B, KEY_STAR);
+		map.append(KeyEvent.KEYCODE_BUTTON_X, KEY_POUND);
+		map.append(KeyEvent.KEYCODE_BUTTON_Y, KEY_NUM0);
+		map.append(KeyEvent.KEYCODE_BUTTON_L1, KEY_SOFT_LEFT);
+		map.append(KeyEvent.KEYCODE_BUTTON_R1, KEY_SOFT_RIGHT);
+		map.append(KeyEvent.KEYCODE_BUTTON_L2, KEY_NUM1);
+		map.append(KeyEvent.KEYCODE_BUTTON_R2, KEY_NUM3);
 		return map;
 	}
 }

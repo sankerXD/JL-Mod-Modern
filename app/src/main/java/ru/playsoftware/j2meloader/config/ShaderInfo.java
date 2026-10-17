@@ -24,7 +24,8 @@ import androidx.annotation.NonNull;
 import com.google.gson.annotations.SerializedName;
 
 public class ShaderInfo implements Comparable<ShaderInfo>, Parcelable {
-	public transient String dir;
+	@SerializedName("dir")
+	public String dir;
 	@SerializedName("fragment")
 	public String fragment;
 	@SerializedName("vertex")
@@ -42,6 +43,10 @@ public class ShaderInfo implements Comparable<ShaderInfo>, Parcelable {
 
 	@SuppressWarnings("unused")    // used by Gson deserialization
 	public ShaderInfo() {
+	}
+
+	public String getName() {
+		return name;
 	}
 
 	public ShaderInfo(String name, String author) {

@@ -1,58 +1,77 @@
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/woesss/JL-Mod?style=plastic)](https://github.com/woesss/JL-Mod/releases/latest)
-[![donate](https://img.shields.io/badge/donate-PayPal-%234D8A99?style=plastic)](https://www.paypal.me/j2meforever)
+# JL-Mod Modern
 
-[Перейти на Русский](README_RU.md)  
+A modernization fork of [JL-Mod](https://github.com/woesss/JL-Mod) — the J2ME (MIDP) emulator for Android —
+tuned for retro handhelds.
 
-Unofficial fork of ["J2ME-Loader" (A J2ME emulator for Android)](https://github.com/nikita36078/J2ME-Loader) 
+The emulation core is untouched. What changed is everything around it: the parts you actually touch on a
+device with a D-pad, four face buttons and two shoulders.
 
-<img src="screenshots/screen01.png" width="240"> <img src="screenshots/screen02.png" width="240"> <img src="screenshots/screen03.png" width="240">
+## What's new
 
-### **!!!Attention!!!**
-**Some settings have been changed in the mod. J2ME Loader may not work correctly with games, templates and settings installed or configured by the mod and vice versa. In order not to have to reinstall-reconfigure, it is better to make a backup, copy or not specify the same working directory for the mod and J2ME Loader.**
+- **Gamepad first.** L2/R2 are analog axes (`ABS_Z` / `ABS_RZ`) on most handhelds and were invisible to the
+  emulator. They are now translated into real key events, so they can be mapped like any other button —
+  including inside the key mapping screen.
+- **Global key mapping.** One mapping for every game. A game only overrides it if you change the mapping
+  for that game.
+- **Global shaders.** Load a shader file once, it applies to all games. Ships with *HD anti-alias*
+  (bilinear + unsharp mask) and a *CRT slot mask* (OSSC port) — see [`shaders/`](shaders) —
+  and a per-game shader still wins.
+- **Global scaling.** Stretch / integer scaling / fit-to-edge, applied to every game. Integer mode is
+  centered and never crops.
+- **Full screen.** The in-game action bar is gone; the menu slides in from the left edge (or the MENU key).
+- **Sane defaults.** Gamepad mapping and shader defaults apply to newly added games with no configuration,
+  and the resolution picker now offers the usual J2ME resolutions.
 
-#### **Using shaders (image post-processing filters)**
+## Upstream features (kept)
 
-  Supports the same shader format as [PPSSPP](https://www.ppsspp.org)
-  To use, you need to put them in the `shaders` folder in the working directory of the emulator,
-  then in the game profile, select the graphics output mode: "Hardware (OpenGL ES)" and select the desired shader.
-  Some shaders have settings - when you select one, an icon will appear next to the name, when you click on it, a window with settings will open
-  A small collection of compatible shaders can be found in this repository: https://github.com/woesss/ppsspp_shaders
+- **Shaders** — PPSSPP-compatible post-processing filters in `/sdcard/JL-Mod/shaders`
+- **Sound banks** — DLS / SF2 banks in `/sdcard/JL-Mod/soundbanks`
+- **Skins** — background images in `/sdcard/JL-Mod/skins`
+- **Mascot Capsule 3D** — if a 3D scene is missing, add `micro3d.v3.render.no-mix2D3D: true` to
+  *System properties*; `micro3d.v3.texture.filter: true` enables texture filtering
+- **Porting** — build an Android app from J2ME sources, see the
+  [upstream wiki](https://github.com/woesss/JL-Mod/wiki/Porting-midlet-instruction)
 
-#### **Using sound banks for midi playback (DLS, SF2)**
+## Install
 
-  Soundbank files (DLS, SF2) should be placed in the `soundbanks` folder in the working directory of the emulator.
-  Next, in the game profile settings in the `Audio` section, select the desired one.
-  SF2 support is still in beta mode - only standard midi files are supported.
-  Not all banks are supported by the synthesizers used (Sonivox, TinySoundFont).
-  If the bank or audio file is not supported, playback will automatically switch to a standard player with a standard bank.
+- Android 4.0+ (minSdk 14), arm64-v8a / armeabi-v7a / x86 / x86_64
+- Download the APK from the releases page
+- This build is signed with a different key than upstream, so **uninstall the original JL-Mod first**.
+  Games and profiles live in `/sdcard/JL-Mod` and are kept — only the app's own settings are reset.
 
-#### **Background image (skin)**
+## Quick start
 
-  The image file in any format supported by Android must be placed in the `skins` folder in the emulator's working folder.  
-  Next, in the game profile settings, select it.  
-  The position and size of the virtual screen can be adjusted using the scale and padding settings.  
-  You can also set the screen in the image: a rectangular area filled with transparent black (`#00000000`).  
-  The emulator will automatically place the game screen in this area.  
-  The reaction to the skin buttons can be made by overlaying the virtual keyboard buttons, and the keyboard itself can be made completely transparent.  
+1. Add games (the app itself, or launch them with their path from a frontend such as Pegasus)
+2. **Settings → Global key mapping** — map the gamepad once
+3. **Settings → Shader** — load `hd.ini` (copy the files first:
+   `adb push shaders/ /sdcard/JL-Mod/shaders/`)
+4. **Settings → Scaling mode** — integer or fit-to-edge
+5. Per game: long-press the game → Settings (resolution, per-game shader/keys)
 
-#### **Mascot Capsule v3 support**
-  In some games (seen in "Medal of Honor") the 3D scene may not be displayed due to the overlap with the 2D background.
-  Try adding the following line to the "System Properties" field:
-  **micro3d.v3.render.no-mix2D3D: true**
-  If it doesn't help, please report this game in [bug-report](https://github.com/woesss/JL-Mod/issues/new?assignees=&labels=bug&template=issue-template.md&title=) or in another way.
+## Build
 
-  Another one property turns on the texture filter (built into OpenGL), but this can generate distortion in the form of extra texels being captured at the edges of polygons:
-  **micro3d.v3.texture.filter: true**
-   without this setting, the quality of the textures is as close to the original as possible and looks more vintage.
+```bash
+./gradlew assembleEmulatorRelease
+```
 
-#### **Porting**
-  Added the ability to build an Android application from the source code of a J2ME application using the code of this project  
-  Read more in the [Wiki](https://github.com/woesss/JL-Mod/wiki/Porting-midlet-instruction)
+Native libraries are prebuilt and shipped in `app/src/main/jniLibs`, so the NDK is not needed.
+`shaders/` holds the bundled filters — push them to `/sdcard/JL-Mod/shaders/` on the device.
+Implementation notes are in [AGENTS.md](AGENTS.md).
 
-[Download APK](https://github.com/woesss/JL-Mod/releases/latest)
+## Credits
 
-#### **External links**  
-Emulation General Wiki:  
-[JL-Mod](http://emulation.gametechwiki.com/index.php/JL-Mod)  
-[Mascot Capsule 3D](http://emulation.gametechwiki.com/index.php/Mascot_Capsule_3D)  
-[Mascot Capsule 3D compatibility list](https://emulation.gametechwiki.com/index.php/Mascot_Capsule_3D_compatibility_list)  
+- [JL-Mod](https://github.com/woesss/JL-Mod) / [J2ME-Loader](https://github.com/nikita36078/J2ME-Loader) by
+  Nikita Shakarun, Yury Kharchenko, woesss and contributors
+- CRT slot mask ported from *OSSC Slot Mask simulator* by DariusG (RetroArch slang shaders)
+- Apache License 2.0
+
+## 中文简介
+
+老模拟器的现代化改造：模拟核心不动，重做交互层。
+
+- **手柄优先** — L2/R2 在掌机上上报为模拟轴，原版收不到；现在转成真实按键，可以像其它键一样映射
+- **全局按键映射** — 一套映射对所有游戏生效，某个游戏单独改过才覆盖全局
+- **全局着色器** — 加载一次到处生效，附带「高清抗锯齿」和「CRT 遮罩」两个滤镜
+- **全局缩放** — 全屏拉伸 / 整数缩放 / 短边缩放（整数模式居中，不裁切）
+- **全屏** — 去掉游戏内顶栏，菜单改为左侧滑出（或按 MENU 键）
+- **开箱即用** — 新加的游戏零配置就有手柄映射和滤镜；分辨率选择器补齐了常用 J2ME 尺寸

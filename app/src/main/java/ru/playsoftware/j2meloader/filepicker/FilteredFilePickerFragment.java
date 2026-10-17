@@ -30,6 +30,7 @@ import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.loader.content.AsyncTaskLoader;
 import androidx.loader.content.Loader;
@@ -49,7 +50,14 @@ import ru.playsoftware.j2meloader.R;
 import ru.playsoftware.j2meloader.util.StoragePermissionHelper;
 
 public class FilteredFilePickerFragment extends AbstractFilePickerFragment<File> {
-	private static final List<String> extList = Arrays.asList(".jad", ".jar", ".kjx");
+	private static final List<String> DEFAULT_EXTENSIONS = Arrays.asList(".jad", ".jar", ".kjx");
+	private List<String> extList = DEFAULT_EXTENSIONS;
+
+	public void setExtensions(@Nullable List<String> extensions) {
+		if (extensions != null && !extensions.isEmpty()) {
+			this.extList = extensions;
+		}
+	}
 	private static final File ROOT_FILE = new File("/");
 
 	private final Stack<File> history = new Stack<>();

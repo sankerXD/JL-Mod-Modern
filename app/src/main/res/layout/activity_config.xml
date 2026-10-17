@@ -347,44 +347,50 @@
                 app:layout_constraintStart_toEndOf="@+id/barrierScreenConfig"
                 app:layout_constraintTop_toBottomOf="@+id/cxImmediate" />
 
-            <LinearLayout
-                android:id="@+id/shaderContainer"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+            <TextView
+                android:id="@+id/tvShaderTitle"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/height_config_row"
+                android:gravity="center_vertical"
+                android:text="@string/PREF_SHADER_FILTER"
+                android:textColor="?attr/textColorSecondary"
+                android:textSize="15sp"
                 android:visibility="gone"
-                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/barrierScreenConfig"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/tvGraphicsMode"
-                tools:visibility="visible">
+                app:layout_constraintWidth_min="wrap"
+                tools:visibility="visible" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="@dimen/height_config_row"
-                    android:gravity="center_vertical"
-                    android:text="@string/PREF_SHADER_FILTER"
-                    android:textAppearance="?android:attr/textAppearanceSmall"
-                    android:textColor="?attr/textColorSecondary"
-                    android:textSize="15sp" />
+            <TextView
+                android:id="@+id/spShader"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/height_config_row"
+                android:background="?attr/selectableItemBackground"
+                android:ellipsize="end"
+                android:gravity="center_vertical"
+                android:paddingEnd="6dp"
+                android:singleLine="true"
+                android:textColor="?attr/textColorSecondary"
+                android:textSize="15sp"
+                android:visibility="gone"
+                app:layout_constraintEnd_toStartOf="@+id/btShaderTune"
+                app:layout_constraintStart_toEndOf="@+id/barrierScreenConfig"
+                app:layout_constraintTop_toTopOf="@+id/tvShaderTitle"
+                tools:text="Follow global shader"
+                tools:visibility="visible" />
 
-                <Spinner
-                    android:id="@+id/spShader"
-                    android:layout_width="0dp"
-                    android:layout_height="@dimen/height_config_row"
-                    android:layout_weight="1"
-                    android:textColor="?attr/textColorSecondary"
-                    android:textSize="15sp" />
-
-                <ImageButton
-                    android:id="@+id/btShaderTune"
-                    style="@style/ImageButtonStyle"
-                    android:layout_width="@dimen/height_config_row"
-                    android:layout_height="@dimen/height_config_row"
-                    android:contentDescription="@string/shader_tuning"
-                    app:srcCompat="@drawable/ic_baseline_tune_24"
-                    android:visibility="gone"
-                    tools:visibility="visible" />
-
-            </LinearLayout>
+            <ImageButton
+                android:id="@+id/btShaderTune"
+                style="@style/ImageButtonStyle"
+                android:layout_width="@dimen/height_config_row"
+                android:layout_height="@dimen/height_config_row"
+                android:contentDescription="@string/shader_tuning"
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="@+id/tvShaderTitle"
+                app:srcCompat="@drawable/ic_baseline_tune_24"
+                tools:visibility="visible" />
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/cxParallel"
@@ -396,7 +402,7 @@
                 android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/shaderContainer"
+                app:layout_constraintTop_toBottomOf="@+id/tvShaderTitle"
                 tools:visibility="visible" />
 
             <com.google.android.material.switchmaterial.SwitchMaterial
@@ -459,7 +465,7 @@
                 android:layout_width="10dp"
                 android:layout_height="match_parent"
                 app:barrierDirection="end"
-                app:constraint_referenced_ids="tvSkinTitle,textView3,cmdScreenBack,textView4,tvScaleType,tvGraphicsMode,tvLimitFps,tvScreenGravity,tvScreenPadding" />
+                app:constraint_referenced_ids="tvSkinTitle,textView3,cmdScreenBack,textView4,tvScaleType,tvGraphicsMode,tvLimitFps,tvScreenGravity,tvScreenPadding,tvShaderTitle" />
 
 
         </androidx.constraintlayout.widget.ConstraintLayout><!-- Screen -->
