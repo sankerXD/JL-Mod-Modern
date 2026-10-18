@@ -2,6 +2,7 @@ import java.util.Locale
 import java.util.Properties
 import java.util.jar.Attributes
 import java.util.jar.Manifest
+import java.util.zip.ZipFile
 
 plugins {
     id("com.android.application")
@@ -168,4 +169,34 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+}
+
+// ---------------------------------------------------------------------------
+// 发布前的硬性检查：着色器必须随 APK 自带（见 AGENTS.md「着色器已内置进 APK」）。
+// 运行 ./gradlew verifyBundledShaders —— 少一个文件就编译失败，防止以后误删。
+// ---------------------------------------------------------------------------
+tasks.register("verifyBundledShaders") {
+    dependsOn("assembleEmulatorRelease")
+    doLast {
+        val dir = layout.buildDirectory.dir("outputs/apk/emulator/release").get().asFile
+        val apk = dir.listFiles { f -> f.extension == "apk" }?.maxByOrNull { it.lastModified() }
+            ?: throw IllegalStateException("没有找到 release APK: $dir")
+        val required = listOf(
+            "assets/bundled_shaders/hd.ini",
+            "assets/bundled_shaders/hd.fsh",
+            "assets/bundled_shaders/slotmask.ini",
+            "assets/bundled_shaders/slotmask.fsh",
+            "assets/bundled_shaders/slotmask.vsh"
+        )
+        ZipFile(apk).use { zip ->
+            val missing = required.filter { zip.getEntry(it) == null }
+            if (missing.isNotEmpty()) {
+                throw IllegalStateException(
+                    "APK ${apk.name} 缺少内置着色器: $missing\n" +
+                            "别删 app/src/main/assets/bundled_shaders/ 和 BundledShaders.install() 的挂钩。"
+                )
+            }
+        }
+        println("OK: ${apk.name} 自带 ${required.size} 个着色器文件")
+    }
 }

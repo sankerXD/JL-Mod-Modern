@@ -7,6 +7,18 @@
 - Release 附件：`JL-Mod-Modern_1.0.1.apk`（用 `jlmod.keystore` 签名，密钥不入库）
 - 重新发版：改版本号 → `./gradlew assembleEmulatorRelease` → `git tag/gpush` → `gh release create --repo sankerXD/JL-Mod-Modern`
 
+### 发布检查清单（每次发版照这个走，别跳步）
+
+1. `app/build.gradle.kts`：`versionCode` +1、`versionName` 改掉
+2. **确认安装包自带着色器还在**（从 1.0.2 起是硬要求，用户明确说过以后别丢）：
+   - `app/src/main/assets/bundled_shaders/` 里 5 个文件（hd.ini/hd.fsh/slotmask.ini/slotmask.fsh/slotmask.vsh）
+   - `FileUtils.initWorkDir()` 里还挂着 `BundledShaders.install(dir)` 那一行
+3. `./gradlew assembleEmulatorRelease && ./gradlew verifyBundledShaders`
+   （后者会打开 APK 逐个检查 `assets/bundled_shaders/*`，少一个直接编译失败）
+4. 实机验一遍：`rm -rf /sdcard/JL-Mod/shaders` → 启动 App → 文件自动重建
+5. `git tag vX.Y.Z` → `git push modern main --tags`
+6. `gh release create vX.Y.Z --repo sankerXD/JL-Mod-Modern JL-Mod-Modern_X.Y.Z.apk --title ... --notes ...`
+
 > 这里记录本次改造的**全过程**：为什么这么改、踩过哪些坑、怎么回滚。
 > 面向维护者自己（也方便 AI 助手接手）。对外说明看 [README.md](JL-Mod-trigger/README.md)。
 
