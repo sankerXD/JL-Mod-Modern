@@ -2,7 +2,7 @@
 
 **已发布**：https://github.com/sankerXD/JL-Mod-Modern · v1.0.1
 - 分支 `modern` → 远端 `main`；上游基线 commit `724b90a0`（JL-Mod 0.87.1）
-- 版本：`versionName 1.0.1` / `versionCode 52`
+- 版本：`versionName 1.0.2` / `versionCode 53`（**1.0.2 = 着色器内置进 APK，本地已编译安装验证，尚未发版**）
 - v1.1.0/v1.1.1（即时存档实验版）已回滚并从 Releases 删掉，见「六点五」
 - Release 附件：`JL-Mod-Modern_1.0.1.apk`（用 `jlmod.keystore` 签名，密钥不入库）
 - 重新发版：改版本号 → `./gradlew assembleEmulatorRelease` → `git tag/gpush` → `gh release create --repo sankerXD/JL-Mod-Modern`
@@ -157,6 +157,24 @@ Mask brightness、Scanline、Threshold。
 
 > 结论：CRT 像素滤镜在小尺寸手游上不讨好——低分辨率 + 非整数放大，遮罩要么细到像噪点、
 > 要么粗到像彩色棋盘，所以默认改成 HD 抗锯齿。
+
+### 着色器已内置进 APK（1.0.2）
+
+以前换台机器要先 `adb push shaders/ /sdcard/JL-Mod/shaders/`，现在**装完就有**：
+
+- 文件放在 `app/src/main/assets/bundled_shaders/`（hd.ini/hd.fsh/slotmask.ini/slotmask.fsh/slotmask.vsh）
+- 启动时由 `util/BundledShaders.install()` 释放到 `<工作目录>/shaders/`，
+  挂钩点是 `FileUtils.initWorkDir()`（MainActivity 建目录、改工作目录、授权后重试都会走到，天然幂等）
+- **不会覆盖你改过的文件**：书签文件 `shaders/.bundled_shaders` 里记着 `version` + 每个文件的 md5；
+  升级 APK 时只刷新"还是我上次发的那份"的文件，你自己编辑过的原样保留
+- 书签是 `.bundled_shaders` 而不是 `.ini`，所以文件选择器里看不到它
+
+实测（vivo/ Pocket Block、Android 12）：`rm -rf /sdcard/JL-Mod/shaders` 后启动 App，
+五个文件 + 书签（`version=53`）自动重建；设置 → 着色器 → 选文件，选择器里直接能看到
+`hd.ini` 和 `slotmask.ini`。
+
+> 注意 `assets/shaders/` 是**引擎内部**的着色器（`Program.java` / `ShaderProgram.java` 通过
+> `getAssets().open("shaders/simple.fsh")` 读），别把用户滤镜混进去，所以另开了 `bundled_shaders/`。
 
 ## 五、批量铺开（已执行：506/506）
 
@@ -464,7 +482,7 @@ jar 在 `/sdcard/roms/JAVA/`，按文件名生成 `converted/<名>/` 和 `config
 | `JL-Mod-trigger/` | 分支源码（commit 724b90a0 + 全部补丁），仓库根 |
 | `build.sh` | 一键重编译 |
 | `jl_map.py` | 批量写/清游戏配置 |
-| `shaders/` | 着色器源码（hd / slotmask） |
+| `shaders/` | 着色器源码（hd / slotmask），内容与 APK 内 `assets/bundled_shaders/` 一致 |
 | `jl-original.apk` | 原版 APK（回滚用） |
 | `backup/sdcard-JL-Mod-backup.tar` | 改造前 `/sdcard/JL-Mod` 全量备份 |
 | `backup/config-純愛.orig.json` | 该游戏原始配置 |

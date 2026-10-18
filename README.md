@@ -43,8 +43,8 @@ device with a D-pad, four face buttons and two shoulders.
 
 1. Add games (the app itself, or launch them with their path from a frontend such as Pegasus)
 2. **Settings → Global key mapping** — map the gamepad once
-3. **Settings → Shader** — load `hd.ini` (copy the files first:
-   `adb push shaders/ /sdcard/JL-Mod/shaders/`)
+3. **Settings → Shader** — pick `hd.ini` or `slotmask.ini`. Both ship inside the APK and are
+   already in `/sdcard/JL-Mod/shaders/` after the first launch — nothing to copy by hand.
 4. **Settings → Scaling mode** — integer or fit-to-edge
 5. Per game: long-press the game → Settings (resolution, per-game shader/keys)
 
@@ -55,7 +55,9 @@ device with a D-pad, four face buttons and two shoulders.
 ```
 
 Native libraries are prebuilt and shipped in `app/src/main/jniLibs`, so the NDK is not needed.
-`shaders/` holds the bundled filters — push them to `/sdcard/JL-Mod/shaders/` on the device.
+`shaders/` holds the filter sources; they are bundled into the APK
+(`app/src/main/assets/bundled_shaders`) and extracted to `/sdcard/JL-Mod/shaders/` on first launch
+(`util/BundledShaders`). Files you edit there are never overwritten by an update.
 Implementation notes are in [AGENTS.md](AGENTS.md).
 
 ## Credits
@@ -75,3 +77,4 @@ Implementation notes are in [AGENTS.md](AGENTS.md).
 - **全局缩放** — 全屏拉伸 / 整数缩放 / 短边缩放（整数模式居中，不裁切）
 - **全屏** — 去掉游戏内顶栏，菜单改为左侧滑出（或按 MENU 键）
 - **开箱即用** — 新加的游戏零配置就有手柄映射和滤镜；分辨率选择器补齐了常用 J2ME 尺寸
+- **滤镜随 APK 自带** — 装完 `/sdcard/JL-Mod/shaders/` 里就有 `hd.ini` / `slotmask.ini`，不用再手动拷

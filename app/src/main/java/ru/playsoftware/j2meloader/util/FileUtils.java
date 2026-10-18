@@ -173,6 +173,8 @@ public class FileUtils {
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
+			// 把 APK 自带的着色器铺到 <工作目录>/shaders/，开箱即用
+			BundledShaders.install(dir);
 			return true;
 		}
 		return false;

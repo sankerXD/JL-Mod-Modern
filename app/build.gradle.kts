@@ -21,8 +21,8 @@ android {
         applicationId = "ru.woesss.j2meloader"
         minSdk = rootProject.extra["minSdk"] as Int
         targetSdk = rootProject.extra["targetSdk"] as Int
-        versionCode = 52
-        versionName = "1.0.1"
+        versionCode = 53
+        versionName = "1.0.2"
         resValue("string", "app_name", rootProject.name)
         resValue("string", "app_center", secret.getProperty("appCenterKey", ""))
         vectorDrawables.useSupportLibrary = true
