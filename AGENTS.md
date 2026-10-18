@@ -1,10 +1,10 @@
 # AGENTS.md — 维护者工作笔记
 
-**已发布**：https://github.com/sankerXD/JL-Mod-Modern · v1.0.1
+**已发布**：https://github.com/sankerXD/JL-Mod-Modern · v1.0.2
 - 分支 `modern` → 远端 `main`；上游基线 commit `724b90a0`（JL-Mod 0.87.1）
-- 版本：`versionName 1.0.2` / `versionCode 53`（**1.0.2 = 着色器内置进 APK，本地已编译安装验证，尚未发版**）
+- 版本：`versionName 1.0.2` / `versionCode 53`（**1.0.2 = 着色器内置进 APK，已发版**）
 - v1.1.0/v1.1.1（即时存档实验版）已回滚并从 Releases 删掉，见「六点五」
-- Release 附件：`JL-Mod-Modern_1.0.1.apk`（用 `jlmod.keystore` 签名，密钥不入库）
+- Release 附件：`JL-Mod-Modern_1.0.2.apk`（用 `jlmod.keystore` 签名，密钥不入库）
 - 重新发版：改版本号 → `./gradlew assembleEmulatorRelease` → `git tag/gpush` → `gh release create --repo sankerXD/JL-Mod-Modern`
 
 ### 发布检查清单（每次发版照这个走，别跳步）
