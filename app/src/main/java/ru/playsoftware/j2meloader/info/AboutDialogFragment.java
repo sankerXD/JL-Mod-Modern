@@ -35,7 +35,6 @@ public class AboutDialogFragment extends DialogFragment {
 		SpannableStringBuilder message = new SpannableStringBuilder()
 				.append(getText(R.string.version))
 				.append(BuildConfig.VERSION_NAME)
-				.append(getText(R.string.about_email))
 				.append(getText(R.string.about_github))
 				.append(getText(R.string.about_copyright));
 		TextView tv = new TextView(requireActivity());

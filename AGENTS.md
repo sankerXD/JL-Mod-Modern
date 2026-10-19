@@ -1,11 +1,11 @@
 # AGENTS.md — 维护者工作笔记
 
-**已发布**：https://github.com/sankerXD/JL-Mod-Modern · v1.0.2
+**已发布**：https://github.com/sankerXD/JL-Modern · v1.0.2
 - 分支 `modern` → 远端 `main`；上游基线 commit `724b90a0`（JL-Mod 0.87.1）
 - 版本：`versionName 1.0.2` / `versionCode 53`（**1.0.2 = 着色器内置进 APK，已发版**）
 - v1.1.0/v1.1.1（即时存档实验版）已回滚并从 Releases 删掉，见「六点五」
-- Release 附件：`JL-Mod-Modern_1.0.2.apk`（用 `jlmod.keystore` 签名，密钥不入库）
-- 重新发版：改版本号 → `./gradlew assembleEmulatorRelease` → `git tag/gpush` → `gh release create --repo sankerXD/JL-Mod-Modern`
+- Release 附件：`JL-Modern_1.0.2.apk`（用 `jlmod.keystore` 签名，密钥不入库）
+- 重新发版：改版本号 → `./gradlew assembleEmulatorRelease` → `git tag/gpush` → `gh release create --repo sankerXD/JL-Modern`
 
 ### 发布检查清单（每次发版照这个走，别跳步）
 
@@ -17,7 +17,7 @@
    （后者会打开 APK 逐个检查 `assets/bundled_shaders/*`，少一个直接编译失败）
 4. 实机验一遍：`rm -rf /sdcard/JL-Mod/shaders` → 启动 App → 文件自动重建
 5. `git tag vX.Y.Z` → `git push modern main --tags`
-6. `gh release create vX.Y.Z --repo sankerXD/JL-Mod-Modern JL-Mod-Modern_X.Y.Z.apk --title ... --notes ...`
+6. `gh release create vX.Y.Z --repo sankerXD/JL-Modern JL-Modern_X.Y.Z.apk --title ... --notes ...`
 
 > 这里记录本次改造的**全过程**：为什么这么改、踩过哪些坑、怎么回滚。
 > 面向维护者自己（也方便 AI 助手接手）。对外说明看 [README.md](JL-Mod-trigger/README.md)。
