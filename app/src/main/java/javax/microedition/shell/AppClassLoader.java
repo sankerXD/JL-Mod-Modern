@@ -58,6 +58,18 @@ public class AppClassLoader extends DexClassLoader {
 		sDataDir = appDir.getParentFile().getParent() + Config.MIDLET_DATA_DIR + appDir.getName();
 	}
 
+	/**
+	 * Initialize the static resource store without constructing a DexClassLoader.
+	 * Used by the SnapVM execution path, which loads classes itself but shares
+	 * the same res.jar resource pipeline (Image.createImage(name), etc).
+	 */
+	public static void initRes(File appDir) {
+		sOldResDir = new File(appDir, Config.MIDLET_RES_DIR);
+		setDataDir(appDir);
+		File jar = new File(appDir, Config.MIDLET_RES_FILE);
+		zipFile = jar.exists() ? new ZipFile(jar) : null;
+	}
+
 	public static InputStream getResourceAsStream(Class<?> resClass, String resName) {
 		Log.d(TAG, "CUSTOM GET RES CALLED WITH PATH: " + resName);
 		if (resName == null || resName.equals("")) {

@@ -34,7 +34,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical"
-        android:text="J2ME Loader"
+        android:text="JL-Modern"
         android:textAppearance="?android:textAppearanceLarge"
         tools:ignore="HardcodedText" />
 

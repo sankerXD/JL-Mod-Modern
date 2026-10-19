@@ -26,6 +26,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Environment;
+import android.util.Log;
 
 import androidx.annotation.Keep;
 import androidx.preference.PreferenceManager;
@@ -55,7 +56,11 @@ public class Config {
 	public static final String SKINS_DIR = "/skins/";
 	public static final String SOUNDBANKS_DIR = "/soundbanks/";
 
+	/** 旧版（JL-Mod 包名时代）留下来的数据目录名。 */
+	public static final String LEGACY_EMULATOR_DIR_NAME = "JL-Mod";
+
 	private static String emulatorDir;
+	private static String defaultEmulatorDir;
 	private static String dataDir;
 	private static String configsDir;
 	private static String profilesDir;
@@ -75,8 +80,10 @@ public class Config {
 		SCREENSHOTS_DIR = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
 				+ "/" + appName;
 		SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
+		defaultEmulatorDir = Environment.getExternalStorageDirectory()
+				+ "/" + context.getString(R.string.emulator_dir_name);
 		String path = preferences.getString(PREF_EMULATOR_DIR, null);
-		if (path == null) path = Environment.getExternalStorageDirectory() + "/" + appName;
+		if (path == null) path = defaultEmulatorDir;
 		initDirs(path);
 		preferences.registerOnSharedPreferenceChangeListener(sPrefListener);
 	}
@@ -124,5 +131,24 @@ public class Config {
 		configsDir = emulatorDir + MIDLET_CONFIGS_DIR;
 		profilesDir = emulatorDir + "/templates/";
 		appDir = emulatorDir + "/converted/";
+	}
+
+	/**
+	 * 一次性迁移：/sdcard/JL-Mod -> /sdcard/JL-Modern。只在目标仍是默认目录、
+	 * 目标不存在且旧目录存在时整目录改名；用户自定义过工作目录就不碰。
+	 * 每次进 MainActivity.checkAndCreateDirs 都调一次，拿不到存储权限时自然跳过。
+	 */
+	public static void migrateLegacyDir(File dir) {
+		if (!dir.getAbsolutePath().equals(defaultEmulatorDir) || dir.isDirectory()) {
+			return;
+		}
+		File legacy = new File(Environment.getExternalStorageDirectory(),
+				LEGACY_EMULATOR_DIR_NAME);
+		if (!legacy.isDirectory() || legacy.equals(dir)) {
+			return;
+		}
+		if (legacy.renameTo(dir)) {
+			Log.i("Config", "migrated emulator dir " + legacy + " -> " + dir);
+		}
 	}
 }

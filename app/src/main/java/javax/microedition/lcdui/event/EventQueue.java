@@ -148,6 +148,11 @@ public class EventQueue implements Runnable {
 		}
 	}
 
+	/** the queue's processing thread; null before startProcessing. */
+	public Thread dispatchThread() {
+		return thread;
+	}
+
 	/**
 	 * Stop the event loop.
 	 * This method is blocked until the loop is completely stopped.

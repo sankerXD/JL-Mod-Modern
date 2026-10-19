@@ -81,6 +81,8 @@ import ru.playsoftware.j2meloader.util.FileUtils;
 import ru.playsoftware.j2meloader.util.IOUtils;
 import ru.woesss.j2me.jar.Descriptor;
 
+import org.snapvm.adapter.SnapVm;
+
 public class MicroLoader {
 	private static final String TAG = MicroLoader.class.getName();
 	private static String soundBank;
@@ -179,6 +181,16 @@ public class MicroLoader {
 	MIDlet loadMIDlet(String mainClass) throws ClassNotFoundException, InstantiationException,
 			IllegalAccessException, NoSuchMethodException, InvocationTargetException, IOException {
 		if (BuildConfig.FULL_EMULATOR) {
+			if (SnapVm.enabled()) {
+				Log.i(TAG, "loadMIDlet via SnapVM: " + mainClass);
+				try {
+					return SnapVm.load(appDir, mainClass);
+				} catch (IOException | RuntimeException e) {
+					throw e;
+				} catch (Exception e) {
+					throw new RuntimeException("SnapVM load failed", e);
+				}
+			}
 			File dexSource = new File(appDir, Config.MIDLET_DEX_ARCH);
 			if (!dexSource.exists()) {
 				dexSource = new File(appDir, Config.MIDLET_DEX_FILE);

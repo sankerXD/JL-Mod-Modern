@@ -376,6 +376,59 @@ Mask brightness、Scanline、Threshold。
 
 ---
 
+## 六点六、换核心：snapvm 可快照解释器（进行中）
+
+既然 ART 模型下即时存档物理无解，决定**直接替换执行核心**（不是双核）：
+
+- **新核心是独立项目 `snapvm`**：https://github.com/sankerXD/snapvm
+  纯 Java（`org.snapvm` 包、零依赖、Java 8 源码级）字节码解释器，guest 堆/栈帧/线程全是
+  普通 Java 对象 + green thread 协作调度 → 整机状态可序列化。JL-Mod 之后以依赖方式引用它。
+  硬规矩：**VM 任何改动必须带冒烟测试**，跑 `./test.sh`（= `gradlew test`）全绿才提交。
+- 架构：`游戏字节码 → snapvm 解释器 → host 桥接 → JL-Mod 现有 javax.microedition.* 实现`。
+  MIDP/渲染/音频/RMS 层一行不动，还是 ART 原生速度；需要快照的只有解释器自己的对象图。
+- 全库 API 扫描（523 jar / 22547 class）确认 JL-Mod 现有实现覆盖引用面 ~100%，
+  `java.*` 引用不超出 lang/io/util → VM 只需 CLDC 级类库。
+- SquirrelJME 只当参考实现（它证明了"VM 状态=普通对象图"可行），不直接采用。
+- 里程碑：M1 解释器核心+12 冒烟测试 ✅ → M2 补语义 → M3 接进本仓库跑真 midlet →
+  M4 线程/monitor → M5 快照序列化 → M6 523 游戏 burn-in + 与 ART 路径差分对拍 → M7 摘 dexlib。
+- 开发期**保留 ART/dex 路径做差分对拍**，稳定后再删；最终发布形态是新核心唯一执行。
+
+### M3 真机修复记录（斗地主 / 魔塔 / 合金弹头，全绿）
+
+- **`System.getProperty` 丢属性**：`SnapVm.copyProps` 原来只复制 `microedition.*/fileconn.*/user.home`
+  白名单，`supports.mixing` 这类 profile `SystemProperties` 到不了 `j2meProps`
+  → `12星座斗地主1` 在 `u.<init>@95` NPE。
+  修复：去掉白名单全量复制。此时 host 属性表已被 `MicroLoader.applyConfiguration()`
+  （`System.setProperty` 逐条注入）填满，guest 看到的和 ART 路径完全一致。
+- **`Class.getResourceAsStream` 漏路**：`HostBridge.classBuiltin` 只认 `GuestClass` 接收者。
+  游戏用 `Runtime.getRuntime().getClass().getResourceAsStream("/atb/...")`（host `Class` 接收者）
+  → 落到 host 反射 → 查不到 jar 资源 → `c.l.<clinit>@1109` arraylength NPE（魔塔/合金弹头同型）。
+  修复：host `Class` 接收者先走 `vm.getResource`（相对路径按包名归一化），查不到再回退反射。
+  冒烟测试 `hostClassResourceAsStream`。
+- 验证：斗地主到「是否开启音乐」、魔塔过 c.l 到开场动画、合金弹头-鏖战过 c.l 到标题。
+
+---
+
+## 六点七、更名 JL-Modern + 数据目录迁移
+
+- **显示名**：`rootProject.name = "JL-Modern"` → release `app_name`；
+  debug 变体 `app_name = "JL-Modern-Debug"`。应用内可见字符串全部清掉 `JL-Mod`。
+- **包名**：`applicationId = "io.github.sankerxd.jlmodern"`（debug `.debug`）。
+  新包名 = 新应用身份，旧 `ru.woesss.j2meloader(.debug)` 并存，数据互不覆盖。
+  Java namespace `ru.playsoftware.j2meloader` 不动；代码里全是 `getPackageName()` 自适应。
+- **数据目录与 app_name 解耦**：新增 `resValue("string","emulator_dir_name","JL-Modern")`，
+  release/debug 共用 `/sdcard/JL-Modern`（debug 包以前用 `/sdcard/JL-Debug`，
+  没有卖家布局文件才导致虚拟键"左右反"——见下）。
+- **一次性迁移**：`Config.migrateLegacyDir(File)`，仅当目标是默认目录、目标不存在且
+  `/sdcard/JL-Mod` 存在时整目录 `renameTo`；`MainActivity.checkAndCreateDirs` /
+  `applyWorkDir` 各调一次覆盖权限时序。用户自定义过工作目录则不迁移。
+- **虚拟键"左右反"真因**：不是 `RectSnap` 或映射 bug——debug 数据目录里缺
+  `VirtualKeyboardLayout` 文件，走了 NUM_ARR 兜底（数字左方向右）。卖家的 506 份布局
+  本来就是方向左数字右，数据迁移过来即正确。若新装无配置想要同款，得在游戏设置里
+  把键盘类型切成 Custom/方向+数字。
+
+---
+
 ## 七、坑点清单（血泪版）
 
 每条格式：**现象 → 原因 → 结论**。都是实机踩出来的，以后改这块先扫一眼。

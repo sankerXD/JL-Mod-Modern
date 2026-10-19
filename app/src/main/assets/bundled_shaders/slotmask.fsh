@@ -1,4 +1,4 @@
-// Slot mask for JL-Mod (GLES2)
+// Slot mask for JL-Modern (GLES2)
 // Based on the OSSC Slot Mask simulator by DariusG
 // (RetroArch slang: crt/crt-effects/shaders/slotmask.slang)
 //

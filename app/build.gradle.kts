@@ -19,12 +19,14 @@ android {
     namespace = "ru.playsoftware.j2meloader"
 
     defaultConfig {
-        applicationId = "ru.woesss.j2meloader"
+        applicationId = "io.github.sankerxd.jlmodern"
         minSdk = rootProject.extra["minSdk"] as Int
         targetSdk = rootProject.extra["targetSdk"] as Int
         versionCode = 53
         versionName = "1.0.2"
         resValue("string", "app_name", rootProject.name)
+        // 数据目录名与 app_name 解耦：release/debug 共用 /sdcard/JL-Modern
+        resValue("string", "emulator_dir_name", "JL-Modern")
         resValue("string", "app_center", secret.getProperty("appCenterKey", ""))
         vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -106,7 +108,7 @@ android {
 
     applicationVariants.configureEach {
         if (buildType.name == "debug" && flavorName == "emulator") {
-            resValue("string", "app_name", "JL-Debug")
+            resValue("string", "app_name", "JL-Modern-Debug")
         }
         outputs.configureEach {
             if (this is com.android.build.gradle.internal.api.BaseVariantOutputImpl) {
@@ -125,6 +127,7 @@ fun getMidletManifestProperties(): Attributes = Manifest().let { mf ->
 
 dependencies {
     implementation(project(":dexlib"))
+    implementation("org.snapvm:snapvm:0.1.0")
 
     val roomVersion = "2.6.1"
     annotationProcessor("androidx.room:room-compiler:$roomVersion")

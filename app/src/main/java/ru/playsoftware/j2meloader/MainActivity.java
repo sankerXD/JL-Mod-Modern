@@ -74,6 +74,7 @@ public class MainActivity extends AppCompatActivity {
 	private void checkAndCreateDirs() {
 		String emulatorDir = Config.getEmulatorDir();
 		File dir = new File(emulatorDir);
+		Config.migrateLegacyDir(dir);
 		if (dir.isDirectory() && dir.canWrite()) {
 			FileUtils.initWorkDir(dir);
 			appListModel.setEmulatorDirectory(emulatorDir);
@@ -135,6 +136,7 @@ public class MainActivity extends AppCompatActivity {
 
 	private void applyWorkDir(File file) {
 		String path = file.getAbsolutePath();
+		Config.migrateLegacyDir(file);
 		if (!FileUtils.initWorkDir(file)) {
 			alertDirCannotCreate(path);
 			return;

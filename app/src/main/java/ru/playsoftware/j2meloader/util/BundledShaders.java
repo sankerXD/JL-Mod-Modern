@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 JL-Mod contributors
+ * Copyright 2024 JL-Modern contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,7 +62,7 @@ public final class BundledShaders {
 	}
 
 	/**
-	 * @param workDir emulator root ("/sdcard/JL-Mod"); the shaders go to its {@code shaders/} subdir
+	 * @param workDir emulator root ("/sdcard/JL-Modern"); the shaders go to its {@code shaders/} subdir
 	 */
 	public static void install(File workDir) {
 		if (workDir == null) {

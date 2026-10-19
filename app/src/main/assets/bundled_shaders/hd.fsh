@@ -1,4 +1,4 @@
-// "HD" anti-aliasing for JL-Mod (GLES2)
+// "HD" anti-aliasing for JL-Modern (GLES2)
 //
 // 1. manual bilinear magnification of the low-res game framebuffer
 //    (removes the blocky nearest-neighbour look, smooths diagonals and text)

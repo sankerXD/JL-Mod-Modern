@@ -50,7 +50,7 @@ public class DonationsFragment extends Fragment {
 
 	@Override
 	public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-		// JL-Mod
+		// JL-Modern
 
 		View ym = binding.donationsYoomoneyStubMod.inflate();
 		ym.<Button>findViewById(org.sufficientlysecure.donations.R.id.donations__paypal_donate_button)

@@ -15,5 +15,6 @@ dependencyResolutionManagement {
         maven("https://jitpack.io")
     }
 }
-rootProject.name = "JL-Mod"
+rootProject.name = "JL-Modern"
 include(":app", ":dexlib")
+includeBuild("../snapvm")

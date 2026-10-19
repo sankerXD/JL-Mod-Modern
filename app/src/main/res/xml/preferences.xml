@@ -70,7 +70,7 @@
         android:key="emulator_dir"
         android:icon="@drawable/ic_setting_folder"
         android:title="@string/pref_emulator_dir"
-        tools:summary="/sdcard/J2ME-Loader" />
+        tools:summary="/sdcard/JL-Modern" />
     <PreferenceCategory android:title="@string/pref_category_experimental">
         <SwitchPreferenceCompat
             android:key="micro3d_using_message"
