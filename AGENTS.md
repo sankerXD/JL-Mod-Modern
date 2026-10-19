@@ -411,6 +411,16 @@ Mask brightness、Scanline、Threshold。
   再拉新游戏 → `load` 抛 `IllegalStateException` → ACRA「Init midlet failed」卡死。
   修复：`SnapVm.load` 发现旧实例就 `stop()` 换成新 VM（与 dex 路径"旧 midlet 随进程死"
   等价；pump 是 daemon，`running=false` 自然退出）。验证：同进程 HOME 后再拉新游戏正常进标题。
+- **卡在 SNK logo（pop2 栈残留）**：logcat `host class missing bx`，但 `bx` 是 jar 内 guest 类。
+  真因是解释器 `pop2`(0x58) 实现错了：宽值对弹两槽正确，但两个单值只弹了一个。
+  混淆器爱写 `getstatic arr; arraylength; pop2` 这种"用完即弃"的栈操作，残留一个 int
+  → 其后实参全部左移一格 → `Lbx;` 形参收到 `Integer 0` → `invokevirtual` 走 host 分发
+  → `Class.forName("bx")` CNFE → green thread 死 → 画面冻结。
+  实机证据（badrecv dump 帧链）：`c.e.a` local5=`VmObject:bx` 正常，`c.l.b` local0=`Integer(0)`。
+  修复：`pop2` 无条件 `sp -= 2`。冒烟测试 `pop2TwoSingles`（手搓字节码复现残留错位）+
+  `pop2WidePair`。**教训：guest-owner 的 invokevirtual 收到非 VmObject 接收者 100% 是 VM bug——
+  Interpreter 现在会 dump recv 类型+locals+stack+整条帧链再进 host 分发，一次定位。**
+- 验证：合金弹头-鏖战从卡 SNK logo → 主菜单 → 角色选择 → 1-1 关实机游玩全程正常。
 
 ---
 
