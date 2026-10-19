@@ -44,7 +44,12 @@ public final class SnapVm {
 
 	public static MIDlet load(File appDir, String mainClass) throws Exception {
 		if (instance != null) {
-			throw new IllegalStateException("SnapVm already running");
+			// A previous midlet can outlive its activity in the :midlet process
+			// (HOME instead of a clean exit skips notifyDestroyed/killProcess).
+			// Its VM is dead weight — replace it like the dex path would.
+			Log.i(TAG, "stale SnapVm instance found; stopping it");
+			instance.stop();
+			instance = null;
 		}
 		SnapVm s = new SnapVm();
 		// jar resource pipeline shared with the dex path (Image.createImage, RMS dir)

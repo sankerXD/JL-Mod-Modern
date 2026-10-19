@@ -406,6 +406,11 @@ Mask brightness、Scanline、Threshold。
   修复：host `Class` 接收者先走 `vm.getResource`（相对路径按包名归一化），查不到再回退反射。
   冒烟测试 `hostClassResourceAsStream`。
 - 验证：斗地主到「是否开启音乐」、魔塔过 c.l 到开场动画、合金弹头-鏖战过 c.l 到标题。
+- **`SnapVm already running` 卡死**：`MicroActivity` 在独立 `:midlet` 进程，正常退出靠
+  `notifyDestroyed` 的 `killProcess`；HOME 退到后台时老 `SnapVm.instance` 随进程存活，
+  再拉新游戏 → `load` 抛 `IllegalStateException` → ACRA「Init midlet failed」卡死。
+  修复：`SnapVm.load` 发现旧实例就 `stop()` 换成新 VM（与 dex 路径"旧 midlet 随进程死"
+  等价；pump 是 daemon，`running=false` 自然退出）。验证：同进程 HOME 后再拉新游戏正常进标题。
 
 ---
 
