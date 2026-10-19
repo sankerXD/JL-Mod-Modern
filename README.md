@@ -3,13 +3,14 @@
 A modern J2ME emulator for Android, tuned for retro handhelds.
 The UI and rendering pipeline are inherited from [JL-Mod](https://github.com/woesss/JL-Mod) — huge thanks to its authors.
 
-The emulation core is [snapvm](https://github.com/sankerXD/snapvm): a from-scratch JVM whose entire
-machine state — heap, stacks, threads, monitors — is serializable. That is what makes true save states
-possible on a Java emulator.
+The emulation core is brand-new: a fully serializable Java VM — the entire machine state
+(heap, stacks, threads, monitors) can be snapshotted and restored. It is developed as its own
+project, [snapvm](https://github.com/sankerXD/snapvm), and is what makes true save states possible
+on a Java emulator.
 
 ## Features
 
-- **Save states** — instant save & load at any moment, powered by snapvm
+- **Instant save states** — freeze at any frame, resume exactly where you left off, powered by snapvm
 - **Shaders** — HD anti-alias and CRT slot-mask filters bundled in the APK, global or per-game
 - **Gamepad first** — full key mapping including analog L2/R2 triggers; one global mapping covers all
   games, a game only overrides it if you remap that game
