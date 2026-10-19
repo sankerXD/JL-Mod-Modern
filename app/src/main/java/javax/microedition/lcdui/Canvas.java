@@ -971,12 +971,25 @@ public abstract class Canvas extends Displayable {
 	}
 
 	private class ViewCallbacks implements View.OnTouchListener, SurfaceHolder.Callback, View.OnKeyListener {
+		private static final long MIN_TOUCH_PRESS_MS = 150;
+
 		private final View mView;
+		private final Handler handler = new Handler(Looper.getMainLooper());
 		OverlayView overlayView;
+
+		private long touchDownTime = -1;
+		private Runnable pendingRelease;
 
 		public ViewCallbacks(View view) {
 			mView = view;
 			overlayView = ContextHolder.getActivity().findViewById(R.id.overlay);
+		}
+
+		private void flushPendingRelease() {
+			if (pendingRelease != null) {
+				handler.removeCallbacks(pendingRelease);
+				pendingRelease.run();
+			}
 		}
 
 		@Override
@@ -1050,11 +1063,13 @@ public abstract class Canvas extends Displayable {
 						overlay.pointerPressed(id, x, y);
 					}
 					if (settings.touchInput && id == 0 && virtualScreen.contains(x, y)) {
+						flushPendingRelease();
 						Display.postEvent(CanvasEvent.getInstance(Canvas.this,
 								CanvasEvent.POINTER_PRESSED,
 								id,
 								convertPointerX(x),
 								convertPointerY(y)));
+						touchDownTime = event.getEventTime();
 					}
 					break;
 				case MotionEvent.ACTION_MOVE:
@@ -1106,14 +1121,32 @@ public abstract class Canvas extends Displayable {
 						overlay.pointerReleased(id, x, y);
 					}
 					if (settings.touchInput && id == 0 && virtualScreen.contains(x, y)) {
-						Display.postEvent(CanvasEvent.getInstance(Canvas.this,
-								CanvasEvent.POINTER_RELEASED,
-								id,
-								convertPointerX(x),
-								convertPointerY(y)));
+						float px = convertPointerX(x);
+						float py = convertPointerY(y);
+						long delay = touchDownTime < 0 ? 0
+								: touchDownTime + MIN_TOUCH_PRESS_MS - event.getEventTime();
+						if (delay > 0) {
+							final int pid = id;
+							pendingRelease = () -> {
+								pendingRelease = null;
+								Display.postEvent(CanvasEvent.getInstance(Canvas.this,
+										CanvasEvent.POINTER_RELEASED,
+										pid, px, py));
+							};
+							handler.postDelayed(pendingRelease, delay);
+						} else {
+							Display.postEvent(CanvasEvent.getInstance(Canvas.this,
+									CanvasEvent.POINTER_RELEASED,
+									id, px, py));
+						}
+					}
+					if (id == 0) {
+						touchDownTime = -1;
 					}
 					break;
 				case MotionEvent.ACTION_CANCEL:
+					touchDownTime = -1;
+					flushPendingRelease();
 					if (overlay != null) {
 						overlay.cancel();
 					}

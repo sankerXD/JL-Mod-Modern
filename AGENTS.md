@@ -431,6 +431,21 @@ Mask brightness、Scanline、Threshold。
   executor/executorThread 并 finally 恢复 + `callFromHost` 对 null executor 回退
   新线程路径。冒烟测试 `callFromHostWithStaleExecutorThread`。
   实机验证：按下/松开均即时生效，松开不再卡键，快速交替无残留，logcat 零回调 NPE。
+- **斗地主点牌无反应（短 tap 被轮询错过）——宿主公共路径，非 snapvm bug**：
+  现象是出牌界面点任何牌都不动，但方向键+UP 选牌完全正常、pointer 回调日志也证明
+  事件进了 VM。A/B 对照（`snapvm.on` 开关）实测：两条引擎下 ~20-87ms tap 都丢、
+  ~120ms+ tap 都中、长按必中，表现完全一致。
+  真因：游戏触摸层（`f` 类的 `bg` 热区表）把命中标志 `bg.a` 挂在"按下~松开"窗口里，
+  由游戏线程逐帧轮询消费——按下窗口短于轮询周期（该游戏约 100ms+）就被错过；
+  adb `input tap` 只有 ~20ms，真人快 tap 也常 <100ms，所以体感"每张牌都按不动"。
+  修复（`Canvas.ViewCallbacks`）：`MIN_TOUCH_PRESS_MS = 150`，松开时若按下未满
+  150ms，`POINTER_RELEASED` 用 `Handler.postDelayed` 延后到 150ms 处投递——按下
+  状态保证活过一个轮询周期；新 DOWN/CANCEL 时 `flushPendingRelease()` 先补投挂起的
+  release 保序（150ms 内双击不会乱序）；长按超过 150ms 照旧即时投递。
+  对"release 才动作"的游戏引入 ≤150ms 松开延迟，对轮询型游戏是修复。
+  实机验证：dex 路径 20ms 点 KKKK 炸弹选中+出牌成功；snapvm 路径 20ms 点牌即弹起。
+  注意 `snapvm.on` 是 `/sdcard/JL-Modern/` 根下的全局开关（不是每游戏目录），
+  A/B 时 `mv snapvm.on snapvm.off` 即可切回 dex。
 
 ---
 
