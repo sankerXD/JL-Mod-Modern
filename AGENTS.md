@@ -421,6 +421,16 @@ Mask brightness、Scanline、Threshold。
   `pop2WidePair`。**教训：guest-owner 的 invokevirtual 收到非 VmObject 接收者 100% 是 VM bug——
   Interpreter 现在会 dump recv 类型+locals+stack+整条帧链再进 host 分发，一次定位。**
 - 验证：合金弹头-鏖战从卡 SNK logo → 主菜单 → 角色选择 → 1-1 关实机游玩全程正常。
+- **自动开火/方向键失灵/一直冲/输入延迟大（executorThread 残留）**：logcat 里
+  `keyPressed`/`keyReleased`/`paint` 全部 NPE 在 `Vm.callFromHost` 的 `cur.frames`。
+  真因：snapvm 把 `executorThread` 绑在整个 pump()/runUntilDone 区间且恢复不带
+  finally——任何 `VmError` 逃逸执行切片都会把 `executorThread==本线程` 永久留下，
+  之后该线程每个 host→guest 回调都走"嵌套"分支撞上 `executor==null` NPE，
+  被 `CanvasEvent.catch(Exception)` 吞掉 → keyReleased/paint 全丢（松键不松、画面卡）。
+  修复（snapvm `0322fd6`）：`runSlice` 只在 `Interpreter.execute` 期间持有
+  executor/executorThread 并 finally 恢复 + `callFromHost` 对 null executor 回退
+  新线程路径。冒烟测试 `callFromHostWithStaleExecutorThread`。
+  实机验证：按下/松开均即时生效，松开不再卡键，快速交替无残留，logcat 零回调 NPE。
 
 ---
 
