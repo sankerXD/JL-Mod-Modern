@@ -389,8 +389,9 @@ Mask brightness、Scanline、Threshold。
 - 全库 API 扫描（523 jar / 22547 class）确认 JL-Mod 现有实现覆盖引用面 ~100%，
   `java.*` 引用不超出 lang/io/util → VM 只需 CLDC 级类库。
 - SquirrelJME 只当参考实现（它证明了"VM 状态=普通对象图"可行），不直接采用。
-- 里程碑：M1 解释器核心+12 冒烟测试 ✅ → M2 补语义 → M3 接进本仓库跑真 midlet →
-  M4 线程/monitor → M5 快照序列化 → M6 523 游戏 burn-in + 与 ART 路径差分对拍 → M7 摘 dexlib。
+- 里程碑：M1 解释器核心+12 冒烟测试 ✅ → M2 补语义 ✅ → M3 接进本仓库跑真 midlet ✅ →
+  M4 线程/monitor ✅ → M5 快照序列化（M5a 引擎 ✅ / M5b 适配层单槽位 ✅，多槽位 UI 待定）→
+  M6 523 游戏 burn-in + 与 ART 路径差分对拍 → M7 摘 dexlib。
 - 开发期**保留 ART/dex 路径做差分对拍**，稳定后再删；最终发布形态是新核心唯一执行。
 
 ### M3 真机修复记录（斗地主 / 魔塔 / 合金弹头，全绿）
@@ -446,6 +447,33 @@ Mask brightness、Scanline、Threshold。
   实机验证：dex 路径 20ms 点 KKKK 炸弹选中+出牌成功；snapvm 路径 20ms 点牌即弹起。
   注意 `snapvm.on` 是 `/sdcard/JL-Modern/` 根下的全局开关（不是每游戏目录），
   A/B 时 `mv snapvm.on snapvm.off` 即可切回 dex。
+
+### M4 / M5 进度 + 即时存读档真机验证（Oct 2025，全绿）
+
+- **M4 线程语义**（snapvm `46c76a2`）：`interrupt` 从空桩变真语义
+  （sleep/wait/join 可被提前唤醒、reacquire 后投递 guest IE）、`joinTarget`
+  记账修了 join 超时僵尸 waiter、`runUntilDone` 死锁检测、guest Thread 上
+  setPriority 等变 no-op。
+- **M5a 快照引擎**（snapvm `29defe0`）：`vm.checkpoint()/restore()` 整机冻结
+  恢复，格式见 `snapvm/docs/snapshot-format.md`；host 对象走
+  `registerHostHandle`/`ShadowCodec`，未注册的一律响亮抛 VmError 拒存档。
+- **M5b 适配层**（本仓库 `6149790d`）：`SnapHandles`（Image/Font/Graphics/
+  Player/RecordStore/Command/Ticker/Item/Sprite/TiledLayer 全部 codec）+
+  `SnapStateCodecs`（Displayable/Canvas 影子）+ `SnapVm.saveGame/loadGame`
+  + `MidletThread.rebindMidlet` + 抽屉「即时存档/即时读档」菜单。
+- **存档路径独立**：`Config.MIDLET_SNAPSHOTS_DIR = "/snapshots/"` +
+  `<游戏名>/snap0.svm`——不与 configs 共用（用户明确要求），文件名按
+  `snap<slot>` 预留多槽位。
+- **恢复 rebind 链路**：影子 codec 的 `restore()` 逐个重建时经
+  `reportRestoredMidlet`/`requestCurrent` 回报 → `loadGame` 里
+  `rebindMidlet` + `Display.setCurrent(新影子)` → 新 SurfaceView attach →
+  `surfaceCreated` 自动重绑 VK target + repaint。实测恢复后按键投递到
+  **新的** `SnapCanvasShadow` 实例和新的 guest 对象，无 stale reference。
+- **真机时光旅行验证**（劲舞花儿朵朵）：「选择人物」画面存档 722KB →
+  推进到「选择场景」→ 读档 → 精确回到「选择人物」。恢复后按 -6 游戏
+  正常前进——恢复的 VM 完全活着可交互。
+- **待办**：多槽位 UI（等用户给样式再动，路径已按 `snap<slot>.svm` 预留）；
+  新游戏存档撞未注册 host 对象会响铃报类名，照 `SnapHandles` 现有样子补。
 
 ---
 
@@ -605,6 +633,64 @@ MIPS / pump busy / paints / sleeps / serviceRepaints / host-call topN + `dumpThr
 解释器吞吐直接减半；JL-Mod dex 余量厚掉不穿，SnapVM 本来就压极限直接穿。
 「同一游戏 JL-Mod 满帧 SnapVM 掉帧」**不等于 VM 有 bug**，先查
 `scaling_max_freq`/`scaling_cur_freq` 和 `uptime` 判是否限频态。
+
+### SnapVM 即时存档 / 输入注入调试（Oct 2025）
+
+> 连环坑，全部查清后结论：**注入机制和日志可见性的问题，VM 恢复本身零 bug**。
+> 按踩坑顺序：
+
+**26. 设备上并存三个包，拉错 = 白测**
+`ru.woesss.j2meloader`（原版 JL-Mod）/ `io.github.sankerxd.jlmodern`（发布版
+JL-Modern，无 snapvm 功能）/ `io.github.sankerxd.jlmodern.debug`（开发版，
+**图标名 JL-Modern-Debug**，M5b 在这）。`am start`/广播/`am force-stop`
+时认准包名。`MicroActivity` 不导出，直接 start → SecurityException；
+启动游戏走 `MainActivity` + `VIEW` + `file:///sdcard/roms/JAVA/<名>.jar`。
+
+**27. `sendevent` 直写 `/dev/input/event*` 要 root**
+shell uid Permission denied，别浪费时间。
+
+**28. AYANEO 全屏系统 overlay 挡注入触摸**
+`dumpsys input` 可见 `com.ayaneo.home` 全屏 `NOT_TOUCHABLE` 层 +
+`touchOcclusionMode=BLOCK_UNTRUSTED`——`input tap` 的触摸事件被拦，
+到不了 SurfaceView。但**注入 key event 走另一通道能到 activity**
+（BACK/MENU 有效，BACK 顺带会开抽屉/弹退出确认框）。
+抽屉左缘手势 `input swipe 5 400 250 400` 实测能用（边缘手势进 decor view）。
+
+**29. `input keyevent` 的瞬时按下对轮询式游戏无效**
+很多 J2ME 游戏每帧轮询"键是否按着"标志，~20ms 的 down/up 落在轮询间隙
+全丢；实体键长按有效而注入点按无效 = 典型轮询丢失，不是按键路径断。
+
+**30. `GuestCall`/tracecalls 不覆盖 host→guest 回调**
+`callFromHost`（keyPressed/paint/serviceRepaints 全走它）不经
+`Interpreter.invoke`，`snapvm.tracecalls` 里永远看不到。
+"trace 没 keyPressed" ≠ 按键没进 VM；观察点是 `CanvasForward` 的 `fwd` 日志。
+
+**31. AYANEO `log.tag=I` 吞掉所有 `Log.d`**
+`getprop log.tag` = `I`，全机 DEBUG 级日志静默消失——诊断打满 Log.d 也
+一行没有，曾误判成"广播没到/按键没进"追了整场。
+**设备上别用"日志没打"推断"代码没跑"**；关键诊断用 `Log.i`
+（SnapVm 泵统计每秒都在打，能打出来即证明通道通）。
+
+**32. `RECEIVER_NOT_EXPORTED` 静默吞 shell 广播**
+`am broadcast` 是 uid 2000 外部发送者，NOT_EXPORTED 下系统直接不投递，
+logcat 无任何拒绝痕迹，`dumpsys activity broadcasts` 的 Deliver 列表才看得出来。
+解法：`RECEIVER_EXPORTED` + `BuildConfig.DEBUG` 门控（release 不暴露注入面）。
+
+**33. 解法沉淀 = KEYINJECT 广播注入器（仅 DEBUG 构建）**
+`MicroActivity` 注册的接收器把 `key`/`up` extra 转成 `CanvasEvent` 经
+`Display.postEvent` 进正常事件队列——完全绕开触摸通道/焦点/overlay，
+down/up 分两条广播 = 按住时长完全可控，是设备上唯一可靠的注入方式：
+```bash
+adb shell am broadcast -a io.github.sankerxd.jlmodern.debug.KEYINJECT --ei key -7           # 按下右软键
+adb shell am broadcast -a io.github.sankerxd.jlmodern.debug.KEYINJECT --ei key -7 --ez up true  # 松开
+```
+收到时打 `keyinject key=.. current=..`（Log.i），配合 `fwd` 日志（Log.d）
+能看到 广播→接收器→Canvas→guest 全链路。
+
+**34. 恢复后按键投递到的是新影子实例**
+`SnapCanvasShadow@旧` vs 恢复后 `@新`——logcat 直接看 `keyinject` 行的
+`current=` 和 `fwd` 行的 `guest=`，实例 id 变了是正常的（重建对象），
+不是 stale reference。
 
 ### 想要回滚进度时的土办法
 
