@@ -799,6 +799,20 @@ guest 帧霸屏（死循环）。注意：采样器自身 getAllStackTraces 有�
 guest 的回调都是写活静态表的管道**。验证：反复存档/读档回到场景、
 不进暂停；真·切后台的 hideNotify 仍正常转发（一次吞，不常驻）。
 
+**41. 开声音的游戏存档必炸：PlayerHandle 硬编码 MicroPlayer 字段名**
+现象：客人开了声音（图里有 Player），「即时存档」toast
+`Player capture failed`，存不下。根因：`PlayerHandle.capture` 按名字
+反射 `source/loopCount/mute/level/pan`——那是 **MicroPlayer** 的字段
+集；`SynthPlayer`（midi 合成器）叫 `dataSource`/`volume`、没有
+loopCount，`BasePlayer`/`RecordPlayer`/`AndroidPlayer` 又是另一套。
+修法：locator 改成**按类型扫 `DataSource` 字段**（MicroPlayer.source/
+SynthPlayer.dataSource 通吃），loopCount/mute/level|volume/pan 全走
+`fieldOr` 多名字+默认值兜底；locator 为 null 的不可恢复型 revive 成
+空转 `BasePlayer`（全 no-op 桩）而不是拖垮整个读档。教训：**影子
+codec 反射 host 私有字段时，先枚举该接口的全部实现类**——同接口
+不同实现的字段名各写各的。验证：三国志开声音存档成功（快照里
+`javax.microedition.media.MicroPlayer` 有记录）、读档正常。
+
 ### 想要回滚进度时的土办法
 
 功能上做不了，但手动能做：把 `/sdcard/JL-Mod/data/<游戏名>/` 整个文件夹拷走就是一份完整存档，

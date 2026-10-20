@@ -210,9 +210,9 @@ public final class SnapHandles {
 		public Object capture(Vm vm, Object h) {
 			Player p = (Player) h;
 			try {
-				Object src = field(h.getClass(), "source").get(h);
-				String locator = src instanceof DataSource
-						? ((DataSource) src).getLocator() : null;
+				// impl field names differ: MicroPlayer.source,
+				// SynthPlayer.dataSource — locate by type, not name
+				String locator = locatorOf(h);
 				Object[] listeners;
 				try {
 					listeners = ((java.util.ArrayList<?>)
@@ -222,10 +222,10 @@ public final class SnapHandles {
 				}
 				return new Object[]{
 						locator, p.getState(),
-						field(h.getClass(), "loopCount").get(h),
-						field(h.getClass(), "mute").get(h),
-						field(h.getClass(), "level").get(h),
-						field(h.getClass(), "pan").get(h),
+						fieldOr(h, 1, "loopCount"),
+						fieldOr(h, false, "mute"),
+						fieldOr(h, 100, "level", "volume"),
+						fieldOr(h, 0, "pan"),
 						safeMediaTime(p), listeners,
 				};
 			} catch (VmError e) {
@@ -233,6 +233,31 @@ public final class SnapHandles {
 			} catch (Exception e) {
 				throw new VmError("Player capture failed", e);
 			}
+		}
+
+		private static String locatorOf(Object h) throws IllegalAccessException {
+			for (Class<?> x = h.getClass(); x != null; x = x.getSuperclass()) {
+				for (Field f : x.getDeclaredFields()) {
+					if (!Modifier.isStatic(f.getModifiers())
+							&& DataSource.class.isAssignableFrom(f.getType())) {
+						f.setAccessible(true);
+						Object ds = f.get(h);
+						return ds != null ? ((DataSource) ds).getLocator() : null;
+					}
+				}
+			}
+			return null;
+		}
+
+		private static Object fieldOr(Object h, Object def, String... names)
+				throws IllegalAccessException {
+			for (String n : names) {
+				try {
+					return field(h.getClass(), n).get(h);
+				} catch (NoSuchFieldException ignored) {
+				}
+			}
+			return def;
 		}
 
 		private static long safeMediaTime(Player p) {
@@ -246,11 +271,13 @@ public final class SnapHandles {
 		public Object revive(Vm vm, Object rec) {
 			Object[] r = (Object[]) rec;
 			String locator = (String) r[0];
-			if (locator == null) {
-				throw new VmError("cannot revive Player without a locator");
-			}
 			try {
-				Player p = Manager.createPlayer(locator);
+				// no DataSource-typed field (RecordPlayer, stream players
+				// without one) — revive as a silent stub rather than fail
+				// the whole load; game calls on it just no-op
+				Player p = locator != null
+						? Manager.createPlayer(locator)
+						: new javax.microedition.media.BasePlayer();
 				int state = (Integer) r[1];
 				if (state >= Player.REALIZED) {
 					p.realize();
