@@ -63,6 +63,17 @@ public class MidletThread extends HandlerThread implements Handler.Callback {
 		instance = new MidletThread(microLoader, mainClass);
 	}
 
+	/**
+	 * SnapVM restore swaps in a rebuilt midlet shadow — the lifecycle driver
+	 * must target the new instance (startApp/pauseApp/destroyApp forward into
+	 * the restored VM through it).
+	 */
+	public static void rebindMidlet(MIDlet midlet) {
+		if (instance != null) {
+			instance.mMidlet = midlet;
+		}
+	}
+
 	public static void notifyDestroyed() {
 		Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler);
 		if (instance != null) {

@@ -188,6 +188,11 @@
     <string name="retry">重试</string>
     <string name="save">保存</string>
     <string name="save_log">存储日志</string>
+    <string name="snap_save">即时存档</string>
+    <string name="snap_load">即时读档</string>
+    <string name="snap_saved">已存档</string>
+    <string name="snap_loaded">已读档</string>
+    <string name="snap_failed">存档/读档失败</string>
     <string name="save_profile">保存配置文件</string>
     <string name="saved">已保存 %1$s</string>
     <string name="scoped_storage_warning">你的用户数据存储在一个卸载应用时<b>将被删除的</b>位置：\n</string>

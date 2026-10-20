@@ -904,8 +904,10 @@ public class VirtualKeyboard implements Overlay, Runnable {
 				if (pointer > associatedKeys.length) {
 					return false;
 				}
+				boolean hitAny = false;
 				for (VirtualKey key : keypad) {
 					if (key.contains(x, y)) {
+						hitAny = true;
 						vibrate();
 						associatedKeys[pointer] = key;
 						key.onDown();
@@ -913,6 +915,8 @@ public class VirtualKeyboard implements Overlay, Runnable {
 						break;
 					}
 				}
+				android.util.Log.d("SnapVm", "vk press " + x + "," + y
+						+ " hit=" + hitAny + " target=" + target);
 			}
 			case LAYOUT_KEYS -> {
 				editedIndex = -1;

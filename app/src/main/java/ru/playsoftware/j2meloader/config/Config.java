@@ -42,6 +42,7 @@ public class Config {
 	public static final String APPS_DB_NAME = "/J2ME-apps.db";
 	public static final String DEX_OPT_CACHE_DIR = "dex_opt";
 	public static final String MIDLET_CONFIGS_DIR = "/configs/";
+	public static final String MIDLET_SNAPSHOTS_DIR = "/snapshots/";
 	public static final String MIDLET_CONFIG_FILE = "/config.json";
 	public static final String MIDLET_DATA_DIR = "/data/";
 	public static final String MIDLET_DEX_ARCH = "/converted.zip";

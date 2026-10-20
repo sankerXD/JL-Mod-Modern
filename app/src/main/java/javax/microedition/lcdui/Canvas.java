@@ -1049,6 +1049,9 @@ public abstract class Canvas extends Displayable {
 		@Override
 		@SuppressLint("ClickableViewAccessibility")
 		public boolean onTouch(View v, MotionEvent event) {
+			android.util.Log.d("SnapVm", "onTouch action=" + event.getActionMasked()
+					+ " x=" + event.getX() + " y=" + event.getY()
+					+ " overlay=" + overlay);
 			switch (event.getActionMasked()) {
 				case MotionEvent.ACTION_DOWN:
 					if (overlay != null) {

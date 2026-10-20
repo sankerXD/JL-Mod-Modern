@@ -6,6 +6,12 @@
         android:id="@+id/action_save_log"
         android:title="@string/save_log" />
     <item
+        android:id="@+id/action_snap_save"
+        android:title="@string/snap_save" />
+    <item
+        android:id="@+id/action_snap_load"
+        android:title="@string/snap_load" />
+    <item
         android:id="@+id/action_lock_orientation"
         android:title="@string/action_lock_orientation"
         android:checkable="true"

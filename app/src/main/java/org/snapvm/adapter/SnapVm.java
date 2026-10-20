@@ -7,9 +7,13 @@ import java.util.TimerTask;
 import java.util.zip.ZipFile;
 
 import javax.microedition.lcdui.Canvas;
+import javax.microedition.lcdui.Display;
+import javax.microedition.lcdui.Displayable;
+import javax.microedition.lcdui.SnapStateCodecs;
 import javax.microedition.lcdui.SnapVmBridge;
 import javax.microedition.midlet.MIDlet;
 import javax.microedition.shell.AppClassLoader;
+import javax.microedition.shell.MidletThread;
 
 import org.snapvm.Vm;
 import org.snapvm.VmObject;
@@ -39,6 +43,10 @@ public final class SnapVm {
 	private final Vm vm = new Vm();
 	private volatile boolean running;
 	private Thread pumpThread;
+	private File appDir;
+	// post-restore rebind targets — filled by shadow codecs during vm.restore
+	private volatile MIDlet restoredMidlet;
+	private volatile Displayable restoredCurrent;
 
 	private SnapVm() {
 	}
@@ -104,6 +112,9 @@ public final class SnapVm {
 		s.vm.registerParkedCall("javax/microedition/lcdui/Canvas.serviceRepaints()V",
 				(v, t, args, done) -> SnapVmBridge.serviceRepaints(v, t, args[0], done));
 		LcduiFastCalls.register(s.vm);
+		SnapHandles.registerAll(s.vm);
+		SnapStateCodecs.registerAll(s.vm);
+		s.appDir = appDir;
 		VmObject guest = s.vm.newGuestObject(mainClass);
 		s.start();
 		instance = s;
@@ -215,6 +226,99 @@ public final class SnapVm {
 
 	public void stop() {
 		running = false;
+	}
+
+	// ---------- instant save / load ----------
+
+	public static SnapVm instance() {
+		return instance;
+	}
+
+	public void reportRestoredMidlet(MIDlet m) {
+		restoredMidlet = m;
+	}
+
+	public void requestCurrent(Displayable d) {
+		restoredCurrent = d;
+	}
+
+	private File saveFile() {
+		String dir = Config.getEmulatorDir();
+		if (dir == null || appDir == null) {
+			return null;
+		}
+		// snapshots live in their own tree, not inside per-game configs:
+		// <emulator>/snapshots/<game>/snap<slot>.svm
+		return new File(dir + Config.MIDLET_SNAPSHOTS_DIR + appDir.getName(), "snap0.svm");
+	}
+
+	/** Freeze the guest machine and write the snapshot to the per-game snapshot dir. */
+	public static void saveGame() throws Exception {
+		SnapVm s = instance;
+		if (s == null) {
+			throw new IllegalStateException("SnapVM not running");
+		}
+		byte[] snap = s.vm.checkpoint();
+		File f = s.saveFile();
+		if (f == null) {
+			throw new IllegalStateException("no save dir");
+		}
+		File parent = f.getParentFile();
+		if (parent != null) {
+			parent.mkdirs();
+		}
+		java.io.FileOutputStream out = new java.io.FileOutputStream(f);
+		try {
+			out.write(snap);
+		} finally {
+			out.close();
+		}
+		Log.i(TAG, "saved " + snap.length + " bytes to " + f);
+	}
+
+	/**
+	 * Load the snapshot and swap the machine state in place. Restored shadows
+	 * are rebound onto the live shell: the midlet goes back to MidletThread,
+	 * and the displayable that was current at save time is re-shown.
+	 */
+	public static void loadGame() throws Exception {
+		SnapVm s = instance;
+		if (s == null) {
+			throw new IllegalStateException("SnapVM not running");
+		}
+		File f = s.saveFile();
+		if (f == null || !f.exists()) {
+			throw new IllegalStateException("no save file");
+		}
+		byte[] snap = new byte[(int) f.length()];
+		java.io.FileInputStream in = new java.io.FileInputStream(f);
+		try {
+			int off = 0;
+			while (off < snap.length) {
+				int n = in.read(snap, off, snap.length - off);
+				if (n < 0) {
+					break;
+				}
+				off += n;
+			}
+		} finally {
+			in.close();
+		}
+		s.restoredMidlet = null;
+		s.restoredCurrent = null;
+		s.vm.restore(snap);
+		if (s.restoredMidlet != null) {
+			MidletThread.rebindMidlet(s.restoredMidlet);
+		}
+		if (s.restoredCurrent != null) {
+			Displayable d = s.restoredCurrent;
+			s.restoredCurrent = null;
+			Display.getDisplay(s.restoredMidlet).setCurrent(d);
+			if (d instanceof Canvas) {
+				((Canvas) d).repaint();
+			}
+		}
+		Log.i(TAG, "restored " + snap.length + " bytes");
 	}
 
 	private static void copyProps(Vm vm) {

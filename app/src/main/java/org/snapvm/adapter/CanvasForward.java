@@ -39,6 +39,9 @@ final class CanvasForward {
 	}
 
 	void forward1(String name, int a) {
+		android.util.Log.d("SnapVm", "fwd " + name + " " + a
+				+ " declares=" + vm.guestDeclares(guest, name, "(I)V")
+				+ " guest=" + guest);
 		if (vm.guestDeclares(guest, name, "(I)V")) {
 			vm.callFromHost(guest, name, "(I)V", a);
 		}

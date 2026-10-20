@@ -22,7 +22,10 @@ import static android.content.pm.ActivityInfo.*;
 import static ru.playsoftware.j2meloader.util.Constants.*;
 
 import android.annotation.SuppressLint;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.media.AudioManager;
@@ -35,6 +38,7 @@ import android.text.Editable;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.text.method.DigitsKeyListener;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -62,6 +66,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.appcompat.widget.AppCompatCheckBox;
+import androidx.core.content.ContextCompat;
 import androidx.preference.PreferenceManager;
 
 import com.google.android.material.textfield.TextInputLayout;
@@ -84,6 +89,8 @@ import javax.microedition.lcdui.keyboard.TriggerAxisHandler;
 import javax.microedition.lcdui.keyboard.VirtualKeyboard;
 import javax.microedition.lcdui.skin.SkinLayer;
 import javax.microedition.util.ContextHolder;
+
+import org.snapvm.adapter.SnapVm;
 
 import io.reactivex.SingleObserver;
 import io.reactivex.disposables.Disposable;
@@ -113,6 +120,7 @@ public class MicroActivity extends AppCompatActivity {
 	private int menuKey;
 	private String appPath;
 	private ActivityMicroBinding binding;
+	private BroadcastReceiver keyInjector;
 
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
@@ -187,6 +195,35 @@ public class MicroActivity extends AppCompatActivity {
 		menuKey = microLoader.getMenuKeyCode();
 		inputMethodManager = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
 		setupMenuDrawer();
+		// adb-driven key injection for testing: broadcast delivers a J2ME
+		// keycode straight into the lcdui event queue so down/up timing is
+		// fully controllable (am broadcast -a ...KEYINJECT --ei key -7).
+		keyInjector = new BroadcastReceiver() {
+			@Override
+			public void onReceive(Context context, Intent i) {
+				Displayable d = getCurrent();
+				Log.i("SnapVm", "keyinject key=" + i.getIntExtra("key", 0)
+						+ " current=" + d);
+				if (!(d instanceof Canvas)) {
+					return;
+				}
+				int key = i.getIntExtra("key", 0);
+				boolean up = i.getBooleanExtra("up", false);
+				javax.microedition.lcdui.Display.postEvent(
+						javax.microedition.lcdui.event.CanvasEvent.getInstance(
+								(Canvas) d,
+								up ? javax.microedition.lcdui.event.CanvasEvent.KEY_RELEASED
+										: javax.microedition.lcdui.event.CanvasEvent.KEY_PRESSED,
+								key));
+			}
+		};
+		if (BuildConfig.DEBUG) {
+			registerReceiver(keyInjector,
+					new IntentFilter(getPackageName() + ".KEYINJECT"),
+					ContextCompat.RECEIVER_EXPORTED);
+		} else {
+			keyInjector = null;
+		}
 
 		getOnBackPressedDispatcher().addCallback(new OnBackPressedCallback(true) {
 			@Override
@@ -220,6 +257,15 @@ public class MicroActivity extends AppCompatActivity {
 		hideSoftInput();
 		MidletThread.pauseApp();
 		super.onPause();
+	}
+
+	@Override
+	protected void onDestroy() {
+		if (keyInjector != null) {
+			unregisterReceiver(keyInjector);
+			keyInjector = null;
+		}
+		super.onDestroy();
 	}
 
 	private void hideSoftInput() {
@@ -523,6 +569,10 @@ public class MicroActivity extends AppCompatActivity {
 		if (ContextHolder.getVk() == null) {
 			menu.findItem(R.id.action_submenu_vk).setVisible(false);
 		}
+		if (!SnapVm.enabled()) {
+			menu.findItem(R.id.action_snap_save).setVisible(false);
+			menu.findItem(R.id.action_snap_load).setVisible(false);
+		}
 		return true;
 	}
 
@@ -548,6 +598,10 @@ public class MicroActivity extends AppCompatActivity {
 			showExitConfirmation();
 		} else if (id == R.id.action_save_log) {
 			saveLog();
+		} else if (id == R.id.action_snap_save) {
+			snapSave();
+		} else if (id == R.id.action_snap_load) {
+			snapLoad();
 		} else if (id == R.id.action_lock_orientation) {
 			if (item.isChecked()) {
 				VirtualKeyboard vk = ContextHolder.getVk();
@@ -570,6 +624,28 @@ public class MicroActivity extends AppCompatActivity {
 			handleVkOptions(id);
 		}
 		return true;
+	}
+
+	private void snapSave() {
+		try {
+			SnapVm.saveGame();
+			Toast.makeText(this, R.string.snap_saved, Toast.LENGTH_SHORT).show();
+		} catch (Throwable t) {
+			Log.e("SnapVm", "save failed", t);
+			Toast.makeText(this, getString(R.string.snap_failed) + ": " + t,
+					Toast.LENGTH_LONG).show();
+		}
+	}
+
+	private void snapLoad() {
+		try {
+			SnapVm.loadGame();
+			Toast.makeText(this, R.string.snap_loaded, Toast.LENGTH_SHORT).show();
+		} catch (Throwable t) {
+			Log.e("SnapVm", "load failed", t);
+			Toast.makeText(this, getString(R.string.snap_failed) + ": " + t,
+					Toast.LENGTH_LONG).show();
+		}
 	}
 
 	private void lockOrientation() {

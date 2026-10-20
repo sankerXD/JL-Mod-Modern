@@ -215,6 +215,11 @@
     <string name="retry">retry</string>
     <string name="save">Save</string>
     <string name="save_log">Save log</string>
+    <string name="snap_save">Save state</string>
+    <string name="snap_load">Load state</string>
+    <string name="snap_saved">State saved</string>
+    <string name="snap_loaded">State loaded</string>
+    <string name="snap_failed">Save/load failed</string>
     <string name="save_profile">Save profile</string>
     <string name="saved">Saved %1$s</string>
     <string name="scoped_storage_warning">Your user data is stored in a location which <b>will be deleted</b> when you uninstall the app:\n</string>
