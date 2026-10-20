@@ -625,7 +625,10 @@ SnapVM 的 `GuestCall`/`GuestThrow`/uncaught 全打 `System.err` → 设备上�
 **24. SnapVM 诊断 marker 一览**（`/sdcard/JL-Modern/` 下）
 `snapvm.on` 启用（常驻）、`snapvm.trace` GuestThrow 堆栈、`snapvm.tracecalls` 调用正则、
 `snapvm.stats` host 调用计数、`snapvm.prof` 时间采样（会缩小 pump 配额，测帧率先删它）、
-`snapvm.err` stderr 重定向 gate。遥测每秒一条 `SnapVm` logcat：
+`snapvm.err` stderr 重定向 gate、`snapvm.sample` **VmSampler 栈采样**（查卡顿/假死首选：
+每 5s 一条类目 rollup interp/monitor/host-call/native-io/sched/idle % + top leaf 栈，
+executor 线程附带 `| guest X.m@pc` 客态帧归因；live 开关，创建即启、删掉即停；
+采样器自身有 getAllStackTraces 开销，测完删）。遥测每秒一条 `SnapVm` logcat：
 MIPS / pump busy / paints / sleeps / serviceRepaints / host-call topN + `dumpThreads` 线程快照。
 
 **25. 评测别边充电边跑**

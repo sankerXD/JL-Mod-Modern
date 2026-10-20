@@ -17,6 +17,7 @@ import javax.microedition.shell.MidletThread;
 
 import org.snapvm.Vm;
 import org.snapvm.VmObject;
+import org.snapvm.VmSampler;
 
 import ru.playsoftware.j2meloader.config.Config;
 
@@ -37,6 +38,7 @@ public final class SnapVm {
 	private static final String STATS_FILE = "snapvm.stats";
 	private static final String PROF_FILE = "snapvm.prof";
 	private static final String ERR_FILE = "snapvm.err";
+	private static final String SAMPLE_FILE = "snapvm.sample";
 
 	private static volatile SnapVm instance;
 
@@ -44,6 +46,7 @@ public final class SnapVm {
 	private volatile boolean running;
 	private Thread pumpThread;
 	private File appDir;
+	private VmSampler sampler;
 	// post-restore rebind targets — filled by shadow codecs during vm.restore
 	private volatile MIDlet restoredMidlet;
 	private volatile Displayable restoredCurrent;
@@ -152,8 +155,9 @@ public final class SnapVm {
 		pumpThread = new Thread(() -> {
 			long lastOps = 0, lastLog = System.currentTimeMillis();
 			long busy = 0;
-			String profPath = Config.getEmulatorDir() == null ? null
-					: Config.getEmulatorDir() + "/" + PROF_FILE;
+			String emuDir = Config.getEmulatorDir();
+			String profPath = emuDir == null ? null : emuDir + "/" + PROF_FILE;
+			String samplePath = emuDir == null ? null : emuDir + "/" + SAMPLE_FILE;
 			boolean profWas = false;
 			while (running) {
 				try {
@@ -167,6 +171,18 @@ public final class SnapVm {
 						if (prof != profWas) {
 							vm.profileOn = prof;
 							profWas = prof;
+						}
+						boolean wantSample = samplePath != null && new File(samplePath).exists();
+						if (wantSample != (sampler != null)) {
+							if (wantSample) {
+								sampler = new VmSampler(vm, line -> Log.i(TAG, line));
+								sampler.start();
+								Log.i(TAG, "VmSampler on (marker " + SAMPLE_FILE + ")");
+							} else {
+								sampler.stop();
+								sampler = null;
+								Log.i(TAG, "VmSampler off");
+							}
 						}
 						long ops = vm.totalOps - lastOps;
 						lastOps = vm.totalOps;
@@ -226,6 +242,10 @@ public final class SnapVm {
 
 	public void stop() {
 		running = false;
+		if (sampler != null) {
+			sampler.stop();
+			sampler = null;
+		}
 	}
 
 	// ---------- instant save / load ----------
