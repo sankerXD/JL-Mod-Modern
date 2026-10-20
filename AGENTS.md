@@ -708,6 +708,18 @@ image，`flushGraphics` 推的是空白缓冲 → 全白但一切状态正常
 要进 codec**——影子重建 ≠ 状态复原。诊断顺序：先排除显示链路
 （visible/attach/surface），再查「画的缓冲 vs 推的缓冲是不是同一对象」。
 
+**36. 读档后人物消失：引用数组丢 component 类型（DNF，snapvm `83aa7b7`）**
+现象：读档后场景/HUD 正常但角色不画。logcat 每帧刷
+`Error on PaintMap(): 0`（游戏自己 catch 打的循环下标），
+`snapvm_err.log` 里是 `ClassCastException: [Ljava.lang.Object; -> [[I`。
+真因在解释器层：`ARR_OBJ` 把所有非基本数组一律恢复成 `Object[]`，
+DNF 动画帧表是 `int[][]` 装在 `Vector` 里，客人 `checkcast [[I` 每帧炸。
+修法：新 tag `ARR_TYPED` 记 `component.getName()`，恢复时
+`Array.newInstance` 重建真实类型；旧档（ARR_OBJ）读取兼容但依旧错，
+**需重新存档**。教训：**客人能 checkcast 观察到的运行时类型都要保真**。
+诊断要点：游戏源码未混淆时直接 javap 找绘制路径上的 catch/println，
+`System.out` 在 logcat 可见、`printStackTrace` 进 `snapvm_err.log`。
+
 ### 想要回滚进度时的土办法
 
 功能上做不了，但手动能做：把 `/sdcard/JL-Mod/data/<游戏名>/` 整个文件夹拷走就是一份完整存档，
