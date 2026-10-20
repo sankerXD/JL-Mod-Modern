@@ -740,6 +740,25 @@ String.equals 等 java.lang 叶子调用跳过反射管线（VmObject 接收者
 （回到游戏自身 ~60ms pacing 目标）。诊断手段：9ms 周期的
 `Thread.getAllStackTraces` 采样器按 leaf frame 聚类——比猜热点快。
 
+**38. 查卡顿/假死首选工具：VmSampler（snapvm `04a7c2c`，live 开关）**
+用法一步到位：
+```bash
+adb -s <serial> shell touch /sdcard/JL-Modern/snapvm.sample   # 开（不用重启，~1s 生效）
+adb -s <serial> logcat -s SnapVm:I | grep -A13 VmSampler      # 看输出
+adb -s <serial> shell rm /sdcard/JL-Modern/snapvm.sample      # 关（删 marker，~1s 停）
+```
+每 5s 一条：首行是类目 rollup（`VmSampler N samples/5000ms | idle 42%
+interp 6% monitor 2% host-call 10% native/io 3% sched 20%`），下面 top12
+leaf 栈形如 `count 线程名 @ leaf<=caller<=caller | guest X.m@pc`——
+executor 线程会带上**当时正在跑的客态方法**，直接把「ART 栈」翻译成
+「客人卡在哪」。
+读法：卡顿看占比最高的类目→leaf；`monitor` 高=monitor 热点，
+`host-call` 高=反射/host 调用，`native/io` 高=文件/解码阻塞，
+`idle` 高=在等输入或 sleep（正常）。假死看 `samples 0` 或同一
+guest 帧霸屏（死循环）。注意：采样器自身 getAllStackTraces 有开销，
+**测完删 marker**；sampleOnce() 也给桌面/测试单发用
+（测试 `VmSamplerTest.samplesAttributeGuestFrames`）。
+
 ### 想要回滚进度时的土办法
 
 功能上做不了，但手动能做：把 `/sdcard/JL-Mod/data/<游戏名>/` 整个文件夹拷走就是一份完整存档，
