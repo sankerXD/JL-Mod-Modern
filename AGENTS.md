@@ -692,6 +692,22 @@ adb shell am broadcast -a io.github.sankerxd.jlmodern.debug.KEYINJECT --ei key -
 `current=` 和 `fwd` 行的 `guest=`，实例 id 变了是正常的（重建对象），
 不是 stale reference。
 
+**35. 读档白屏：GameCanvas 离屏缓冲身份断裂（寂静岭3）**
+GameCanvas 的屏显路径是：`getGraphics()` 返回的 Graphics 绑在私有
+`GameCanvas.image` 上，客人往里画，`flushGraphics()` 经 `flushBuffer`
+把它推进 `offscreenCopy`。客人**长期持有**这个 Graphics（寂静岭3 存
+static 字段，每帧复用）。恢复后：影子构造器建了**全新空白 image**，而
+客人复活的 Graphics 还绑着快照里复活出来的那份 → 每帧都画进脱钩的
+image，`flushGraphics` 推的是空白缓冲 → 全白但一切状态正常
+（visible/shown/surface 全 true，`h.run` 还在刷 `PointFont.drawChars`）。
+修法：`DisplayableCodec` 槽位 6 捕获 `GameCanvas.image`，restore 反射
+写回新影子——快照身份表保证 codec 记录里的 image 与 GraphicsHandle
+里的 image 复活成**同一实例**（`GameCanvas.image` 为此去掉 `final`）。
+旧档没有槽位 6，`r.length>6` 兜底、表现同旧版（白屏），需重存。
+教训：**影子构造器 new 出来、又会被客态长期引用的可变 host 对象，一律
+要进 codec**——影子重建 ≠ 状态复原。诊断顺序：先排除显示链路
+（visible/attach/surface），再查「画的缓冲 vs 推的缓冲是不是同一对象」。
+
 ### 想要回滚进度时的土办法
 
 功能上做不了，但手动能做：把 `/sdcard/JL-Mod/data/<游戏名>/` 整个文件夹拷走就是一份完整存档，

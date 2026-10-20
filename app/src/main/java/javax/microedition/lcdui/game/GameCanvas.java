@@ -32,7 +32,7 @@ public class GameCanvas extends Canvas {
 	public static final int GAME_C_PRESSED = 1 << Canvas.GAME_C;
 	public static final int GAME_D_PRESSED = 1 << Canvas.GAME_D;
 
-	private final Image image;
+	private Image image;
 	private final boolean suppressCommands;
 
 	private int keyState;

@@ -65,6 +65,7 @@ public final class SnapStateCodecs {
 					d.listener,
 					disp != null && disp.getCurrent() == d,
 					d instanceof Canvas && fullScreenOf((Canvas) d),
+					gameBufferOf(d),
 			};
 		}
 
@@ -93,6 +94,16 @@ public final class SnapStateCodecs {
 			if (r[5] != null && d instanceof Canvas) {
 				((Canvas) d).setFullScreenMode((Boolean) r[5]);
 			}
+			// GameCanvas.image is the buffer the guest draws into through the
+			// Graphics it got from getGraphics(); a fresh shadow has a blank
+			// buffer while the guest's Graphics still references the revived
+			// image — rebind so flushGraphics() pushes real pixels again.
+			if (r.length > 6 && r[6] instanceof Image
+					&& d instanceof javax.microedition.lcdui.game.GameCanvas) {
+				rebindGameBuffer(
+						(javax.microedition.lcdui.game.GameCanvas) d,
+						(Image) r[6]);
+			}
 		}
 
 		private static boolean fullScreenOf(Canvas c) {
@@ -102,6 +113,33 @@ public final class SnapStateCodecs {
 				return f.getBoolean(c);
 			} catch (Exception e) {
 				return false;
+			}
+		}
+
+		private static Image gameBufferOf(Displayable d) {
+			if (!(d instanceof javax.microedition.lcdui.game.GameCanvas)) {
+				return null;
+			}
+			try {
+				java.lang.reflect.Field f =
+						javax.microedition.lcdui.game.GameCanvas.class
+								.getDeclaredField("image");
+				f.setAccessible(true);
+				return (Image) f.get(d);
+			} catch (Exception e) {
+				return null;
+			}
+		}
+
+		private static void rebindGameBuffer(
+				javax.microedition.lcdui.game.GameCanvas d, Image img) {
+			try {
+				java.lang.reflect.Field f =
+						javax.microedition.lcdui.game.GameCanvas.class
+								.getDeclaredField("image");
+				f.setAccessible(true);
+				f.set(d, img);
+			} catch (Exception ignored) {
 			}
 		}
 	}
