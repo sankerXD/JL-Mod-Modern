@@ -36,9 +36,12 @@ public final class SnapVmBridge {
 			done.run();
 			return;
 		}
+		final long parkedAt = System.currentTimeMillis();
 		Display.postEvent(new SimpleEvent() {
 			@Override
 			public void process() {
+				org.snapvm.adapter.SnapVm.srProbe(
+						System.currentTimeMillis() - parkedAt);
 				done.run();
 			}
 		});

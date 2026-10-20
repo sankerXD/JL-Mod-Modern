@@ -572,6 +572,40 @@ App 退出时会把内存里的配置写回，覆盖外部修改。
 jar 在 `/sdcard/roms/JAVA/`，按文件名生成 `converted/<名>/` 和 `configs/<名>/`。
 没有预置配置的 21 个游戏走代码默认值（映射和滤镜靠内置默认兜底）。
 
+### SnapVM / 寂静岭3 调试（Oct 2025）
+
+**21. `Canvas.isShown()` 曾比真机 J2ME 更严格**
+原实现只认 `visible`（要求 SurfaceView attach + SHOW_NOTIFY 已派发）；而基类
+`Displayable.isShown()` 是 `getCurrent()==this` 的语义判断。寂静岭3 在 `setCurrent` 后
+**立即**查 `isShown()` → false → 二次 `startApp` 提前触发 `h.a(2)` → `new Thread(null)`
+→ 游戏主循环线程从未启动 → 黑屏+虚拟键假死。**dex 路径同样中招**（不是 SnapVM 独有）。
+→ 改成 `visible || super.isShown()`：Display 已选中的 canvas 即视为 shown，对齐真机语义。
+改这个影响所有游戏——回滚点就在这单行。
+
+**22. 设备 stderr 直接进 /dev/null**
+SnapVM 的 `GuestCall`/`GuestThrow`/uncaught 全打 `System.err` → 设备上等于扔掉，
+`log.redirect-stdio` 在 user build 上无效。
+→ 适配层加了 marker 重定向：`/sdcard/JL-Modern/snapvm.err`（gate 文件）存在时把
+`System.err` 重定向到 `snapvm_err.log`（app 自己创建，有写权限）。
+**坑**：shell `touch` 的 marker 属主是 `u0_a84:media_rw`，app 读得到 `exists()` 但写不进
+——所以 gate 和日志必须是两个文件。
+
+**23. `snapvm.tracecalls` 是 `.matches()` 全串匹配**
+想过滤 "Thread|run" 必须写 `.*(Thread|run).*` 形式，裸子串永远匹配不上。
+且 regex 每 invoke 编译一次本身就是负载 → **测完删 marker**。
+
+**24. SnapVM 诊断 marker 一览**（`/sdcard/JL-Modern/` 下）
+`snapvm.on` 启用（常驻）、`snapvm.trace` GuestThrow 堆栈、`snapvm.tracecalls` 调用正则、
+`snapvm.stats` host 调用计数、`snapvm.prof` 时间采样（会缩小 pump 配额，测帧率先删它）、
+`snapvm.err` stderr 重定向 gate。遥测每秒一条 `SnapVm` logcat：
+MIPS / pump busy / paints / sleeps / serviceRepaints / host-call topN + `dumpThreads` 线程快照。
+
+**25. 评测别边充电边跑**
+这台 AYANEO 插电+满载 → SoC ~50°C 触发 MTK thermal 限频（大核 2.0→~1.0GHz），
+解释器吞吐直接减半；JL-Mod dex 余量厚掉不穿，SnapVM 本来就压极限直接穿。
+「同一游戏 JL-Mod 满帧 SnapVM 掉帧」**不等于 VM 有 bug**，先查
+`scaling_max_freq`/`scaling_cur_freq` 和 `uptime` 判是否限频态。
+
 ### 想要回滚进度时的土办法
 
 功能上做不了，但手动能做：把 `/sdcard/JL-Mod/data/<游戏名>/` 整个文件夹拷走就是一份完整存档，

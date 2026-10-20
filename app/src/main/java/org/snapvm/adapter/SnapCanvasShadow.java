@@ -26,7 +26,10 @@ public final class SnapCanvasShadow extends Canvas implements GuestShadow {
 
 	@Override
 	protected void paint(Graphics g) {
+		long start = System.nanoTime();
 		fwd.paint(g);
+		long ms = (System.nanoTime() - start) / 1_000_000;
+		SnapVm.paintProbe(ms);
 	}
 
 	@Override

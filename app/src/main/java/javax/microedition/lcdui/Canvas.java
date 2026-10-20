@@ -691,7 +691,7 @@ public abstract class Canvas extends Displayable {
 
 	@Override
 	public boolean isShown() {
-		return visible;
+		return visible || super.isShown();
 	}
 
 	protected void showNotify() {
