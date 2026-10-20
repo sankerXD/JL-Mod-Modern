@@ -778,6 +778,27 @@ guest 帧霸屏（死循环）。注意：采样器自身 getAllStackTraces 有�
 **测完删 marker**；sampleOnce() 也给桌面/测试单发用
 （测试 `VmSamplerTest.samplesAttributeGuestFrames`）。
 
+**40. 读档后游戏自动进暂停：旧影子污染活图（三国志-赤壁）**
+现象：游戏场景存档→读档，必现白底红字「暂停/返回」。这游戏
+`a.showNotify()`/`hideNotify()` 自带防御：u>0 且 u!=9 时 `bI=u; u=9`
+（真机来电/切后台自动暂停的设计）。读档链路 `loadGame → setCurrent`
+会先 removeAllViews 拆旧画布（surfaceDestroyed→**hideNotify 投递给
+旧影子**）再 attach 新影子（surfaceCreated→showNotify）。修复两层：
+- **根治在 snapvm**：`Vm.restore` 后**类对象 VmClass 是复用的**——旧
+  图对象与新图共享静态区！旧影子的 hideNotify 跑在旧 guest 上却把
+  `u=9` 写进了活静态表。修法：`Vm.epoch` 每次 restore 自增，
+  `VmObject` 构造盖章；`callFromHost` 对 epoch 不符的 recv 直接丢弃
+  （stderr 打 `GuestDrop`）。这一刀同时封死旧影子的积存 paint/按键。
+  测试 `SnapshotTest.staleObjectCallsDropped`。
+- **adapter 层**：新影子（guest 是活对象，epoch 拦不住）的**合成**
+  showNotify 也要吞——客态视角画布从未离开屏幕。`GuestShadow.
+  suppressNextLifecycleNotify()`（`loadGame` 里 setCurrent 前打标）→
+  `CanvasForward.dropNotify` 一次性吞首个 forward0。三个 Canvas
+  影子（Canvas/FullCanvas/GameCanvas）都实现。
+教训：**restore 之后旧影子只是 java 壳还在，客态图已死——任何指向旧
+guest 的回调都是写活静态表的管道**。验证：反复存档/读档回到场景、
+不进暂停；真·切后台的 hideNotify 仍正常转发（一次吞，不常驻）。
+
 ### 想要回滚进度时的土办法
 
 功能上做不了，但手动能做：把 `/sdcard/JL-Mod/data/<游戏名>/` 整个文件夹拷走就是一份完整存档，

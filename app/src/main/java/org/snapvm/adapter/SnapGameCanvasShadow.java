@@ -27,6 +27,11 @@ public final class SnapGameCanvasShadow extends GameCanvas implements GuestShado
 	}
 
 	@Override
+	public void suppressNextLifecycleNotify() {
+		fwd.dropNextNotify();
+	}
+
+	@Override
 	public void paint(Graphics g) {
 		fwd.paint(g);
 	}

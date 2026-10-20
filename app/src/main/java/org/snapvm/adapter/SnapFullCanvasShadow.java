@@ -25,6 +25,11 @@ public final class SnapFullCanvasShadow extends FullCanvas implements GuestShado
 	}
 
 	@Override
+	public void suppressNextLifecycleNotify() {
+		fwd.dropNextNotify();
+	}
+
+	@Override
 	protected void paint(Graphics g) {
 		fwd.paint(g);
 	}

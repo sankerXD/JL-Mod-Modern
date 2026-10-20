@@ -25,6 +25,11 @@ public final class SnapCanvasShadow extends Canvas implements GuestShadow {
 	}
 
 	@Override
+	public void suppressNextLifecycleNotify() {
+		fwd.dropNextNotify();
+	}
+
+	@Override
 	protected void paint(Graphics g) {
 		long start = System.nanoTime();
 		fwd.paint(g);

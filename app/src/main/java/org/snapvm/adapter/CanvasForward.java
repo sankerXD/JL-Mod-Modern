@@ -16,6 +16,7 @@ final class CanvasForward {
 
 	private final Vm vm;
 	private final VmObject guest;
+	private boolean dropNotify;
 
 	CanvasForward(Vm vm, VmObject guest) {
 		this.vm = vm;
@@ -26,6 +27,11 @@ final class CanvasForward {
 		return guest;
 	}
 
+	/** One-shot: swallow the next showNotify/hideNotify forwarded. */
+	void dropNextNotify() {
+		dropNotify = true;
+	}
+
 	void paint(Graphics g) {
 		if (vm.guestDeclares(guest, "paint", PAINT_DESC)) {
 			vm.callFromHost(guest, "paint", PAINT_DESC, g);
@@ -33,6 +39,10 @@ final class CanvasForward {
 	}
 
 	void forward0(String name) {
+		if (dropNotify) {
+			dropNotify = false;
+			return;
+		}
 		if (vm.guestDeclares(guest, name, "()V")) {
 			vm.callFromHost(guest, name, "()V");
 		}

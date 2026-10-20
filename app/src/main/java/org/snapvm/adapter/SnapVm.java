@@ -15,6 +15,7 @@ import javax.microedition.midlet.MIDlet;
 import javax.microedition.shell.AppClassLoader;
 import javax.microedition.shell.MidletThread;
 
+import org.snapvm.GuestShadow;
 import org.snapvm.Vm;
 import org.snapvm.VmObject;
 import org.snapvm.VmSampler;
@@ -333,6 +334,12 @@ public final class SnapVm {
 		if (s.restoredCurrent != null) {
 			Displayable d = s.restoredCurrent;
 			s.restoredCurrent = null;
+			if (d instanceof GuestShadow) {
+				// the re-show is a host-side reconstruction, not a real
+				// hide->show transition — games that auto-pause in showNotify
+				// must not see it
+				((GuestShadow) d).suppressNextLifecycleNotify();
+			}
 			Display.getDisplay(s.restoredMidlet).setCurrent(d);
 			if (d instanceof Canvas) {
 				((Canvas) d).repaint();
