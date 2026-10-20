@@ -565,6 +565,15 @@ AGP 默认的 `proguard-android-optimize.txt` 带 `-assumenosideeffects`，只�
 新 App 是 `u0_a97`，老数据是 `u0_a84` 建的。`/sdcard` 上**能覆盖、但可能删不掉**（unlink 被拒）。
 → 真要删就加"重命名成 `.stale`"兜底。SharedPreferences（主题等）会重置，游戏库和配置不受影响。
 
+**13b. `midlet` flavor 不是 JL-Modern-Debug**
+`./gradlew assembleMidletDebug` 产物的 applicationId 是 `com.example.androidlet.*`
+（把单个 MIDlet 打包成独立 app 的通道）——装了它，`io.github.sankerxd.jlmodern.debug`
+里跑的还是旧代码，设备上的报错行号纹丝不动，白追半天。
+→ 验证用 debug 包一律 `./gradlew assembleEmulatorDebug` →
+`app/build/outputs/apk/emulator/debug/JL-Modern_1.0.2-.apk`。
+装完 `am force-stop io.github.sankerxd.jlmodern.debug` 再启动：`install -r` 不杀
+运行中的进程，旧进程带着旧 dex 继续跑。
+
 **14. 改 `config.json` 前必须先 force-stop**
 App 退出时会把内存里的配置写回，覆盖外部修改。
 → `jl_map.py` 每次先 `am force-stop`。
