@@ -822,6 +822,27 @@ codec 反射 host 私有字段时，先枚举该接口的全部实现类**——
 不同实现的字段名各写各的。验证：三国志开声音存档成功（快照里
 `javax.microedition.media.MicroPlayer` 有记录）、读档正常。
 
+**42. 打开就白屏：entry 调用在 host 回调上 park 时被 runUntilDone 提前放行（snapvm `492f21d`）**
+现象：傲剑江湖-秘籍血案 打开纯白屏，连虚拟键都时有时无，`paints 0`、
+`abandon 1`，`displayable_container` 空。根因：游戏构造链
+`iApp.<init>` → `new j` → `j.<init>` → `a(0)` → `serviceRepaints()`
+park 住入口线程；`Vm.pendingWork()` 不把 `waitMonitor==PARKED` 算作
+在途工作 → `runUntilDone` 走 `abandon` 分支**带着没跑完的构造函数
+返回** → `putstatic mg` 未执行 → `startApp` 读 `mg=null` →
+`Display.setCurrent(null)` 静默早退 → view 永不挂载 →
+`visible=false` → 所有 PaintEvent 丢弃 + `j.run` 空转。修法（snapvm
+`492f21d`）：`runUntilDone` 里 `t.waitMonitor==PARKED` 时跳过
+abandon/deadlock 分支继续等 `done()`——parked host 回调是在途工作，
+entry 调用提前返回 = 调用方拿到半成品状态。排查套路：`snapvm.prof`
+看线程分布 → `tracecalls` 看 setCurrent 有没有被调 → `Display.setCurrent`
+打日志拿到 `disp=null` → 倒推回构造函数 park。教训：**entry 调用
+返回 ≠ 方法跑完**，凡构造函数里碰 serviceRepaints/同步 host 回调的
+游戏都中招（多数游戏构造函数不 park，所以只有这作炸）。测试：
+`entryCallWaitsForParkedCall`。真机验证：标题/剧情画面正常渲染，
+`abandon 0`、paints 持续。注：jar 里 `jx/j11.png` 缺失（文件在根目录），
+游戏自吞 IOException 返回 null，原版 JL-Mod 同样打
+`createImage is failed`——良性 ROM 缺陷，不是白屏原因。
+
 ### 想要回滚进度时的土办法
 
 功能上做不了，但手动能做：把 `/sdcard/JL-Mod/data/<游戏名>/` 整个文件夹拷走就是一份完整存档，
