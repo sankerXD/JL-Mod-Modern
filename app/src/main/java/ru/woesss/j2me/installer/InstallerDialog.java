@@ -230,6 +230,15 @@ public class InstallerDialog extends DialogFragment {
 			if (drawable != null) {
 				dialog.setIcon(drawable);
 			}
+			// A VIEW-intent install means "play it" (frontend/file manager):
+			// start right away like an already-installed game instead of
+			// requiring a tap on 启动 for every new jar.
+			if (requireArguments().containsKey(ARG_URI)) {
+				Config.startApp(requireContext(), app.getTitle(),
+						app.getPathExt(), false);
+				dismiss();
+				return;
+			}
 			btnOk.setText(R.string.START_CMD);
 			btnOk.setOnClickListener(v -> {
 				Config.startApp(v.getContext(), app.getTitle(), app.getPathExt(), false);

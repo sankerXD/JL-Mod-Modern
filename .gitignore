@@ -42,3 +42,4 @@ keystore.properties
 .cxx/
 
 /.kotlin/
+.DS_Store

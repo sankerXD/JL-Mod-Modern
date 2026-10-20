@@ -695,6 +695,25 @@ adb shell am broadcast -a io.github.sankerxd.jlmodern.debug.KEYINJECT --ei key -
 `current=` 和 `fwd` 行的 `guest=`，实例 id 变了是正常的（重建对象），
 不是 stale reference。
 
+**39. 天马G/前端批量测试：安装直达 + 批量预装**
+天马G 的 launch 模板在 `/sdcard/roms/JAVA/metadata.pegasus.txt`
+（原版备份 `metadata.pegasus.txt.bak`），`am start -n <pkg>/.MainActivity
+-a VIEW -d {file.uri}`——改 `-n` 的包名即可换目标（当前指向 debug 包）。
+jar 的 VIEW intent 走 `InstallerDialog`：**STATUS_SAME（已装同 jar）→
+直接进游戏**；STATUS_SUCCESS（新装完）→ 已改成 ARG_URI 路径**自动
+`Config.startApp`**，所以前端第一次拉新游戏也是直达，不用点「启动」。
+`STATUS_EQUAL`（同名同厂同版本不同文件）仍会弹「已安装」窗带启动键。
+批量预装整个目录（每个 jar 都要过 d8 dex，523 个 ~15 分钟、SoC 会热，
+跑正式帧率前先等它完）：
+```bash
+adb -s <serial> shell am broadcast \
+  -a io.github.sankerxd.jlmodern.debug.BATCHINSTALL --es dir /sdcard/roms/JAVA
+adb -s <serial> logcat -s BatchInstall   # [n/523] name -> status，4=新装 5=已装
+```
+前提是 app 进程活着（MainActivity 里注册的 receiver，BuildConfig.DEBUG
+门控）。实现：`ru.woesss.j2me.installer.BatchInstall`（headless 跑
+`AppInstaller.loadInfo`+`install`，复用 `new AppListModel()`）。
+
 **35. 读档白屏：GameCanvas 离屏缓冲身份断裂（寂静岭3）**
 GameCanvas 的屏显路径是：`getGraphics()` 返回的 Graphics 绑在私有
 `GameCanvas.image` 上，客人往里画，`flushGraphics()` 经 `flushBuffer`

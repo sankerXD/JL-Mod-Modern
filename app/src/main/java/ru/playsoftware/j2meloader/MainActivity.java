@@ -18,7 +18,10 @@
 
 package ru.playsoftware.j2meloader;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
@@ -27,11 +30,13 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceManager;
 
 import java.io.File;
 
+import ru.playsoftware.j2meloader.BuildConfig;
 import ru.playsoftware.j2meloader.applist.AppListModel;
 import ru.playsoftware.j2meloader.applist.AppsListFragment;
 import ru.playsoftware.j2meloader.config.Config;
@@ -39,6 +44,7 @@ import ru.playsoftware.j2meloader.util.Constants;
 import ru.playsoftware.j2meloader.util.FileUtils;
 import ru.playsoftware.j2meloader.util.PickDirResultContract;
 import ru.playsoftware.j2meloader.util.StoragePermissionHelper;
+import ru.woesss.j2me.installer.BatchInstall;
 import ru.woesss.j2me.installer.InstallerDialog;
 
 public class MainActivity extends AppCompatActivity {
@@ -69,6 +75,20 @@ public class MainActivity extends AppCompatActivity {
 					.replace(R.id.container, fragment).commit();
 		}
 		setVolumeControlStream(AudioManager.STREAM_MUSIC);
+		if (BuildConfig.DEBUG) {
+			// mass-testing hook: convert every jar under --es dir through the
+			// normal installer pipeline so frontend launches go straight in
+			// (am broadcast -a <pkg>.BATCHINSTALL --es dir /sdcard/roms/JAVA)
+			registerReceiver(new BroadcastReceiver() {
+				@Override
+				public void onReceive(Context context, Intent i) {
+					String dir = i.getStringExtra("dir");
+					if (dir != null)
+						BatchInstall.start(dir);
+				}
+			}, new IntentFilter(getPackageName() + ".BATCHINSTALL"),
+					ContextCompat.RECEIVER_EXPORTED);
+		}
 	}
 
 	private void checkAndCreateDirs() {
