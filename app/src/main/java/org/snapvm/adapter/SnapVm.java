@@ -157,17 +157,17 @@ public final class SnapVm {
 			boolean profWas = false;
 			while (running) {
 				try {
-					boolean prof = profPath != null && new File(profPath).exists();
-					if (prof != profWas) {
-						vm.profileOn = prof;
-						profWas = prof;
-					}
 					long b0 = System.nanoTime();
-					vm.pump(prof ? 4_000 : PUMP_BUDGET);
+					vm.pump(profWas ? 4_000 : PUMP_BUDGET);
 					busy += System.nanoTime() - b0;
 					Thread.sleep(1);
 					long now = System.currentTimeMillis();
 						if (now - lastLog >= 1000) {
+						boolean prof = profPath != null && new File(profPath).exists();
+						if (prof != profWas) {
+							vm.profileOn = prof;
+							profWas = prof;
+						}
 						long ops = vm.totalOps - lastOps;
 						lastOps = vm.totalOps;
 						int n = paints, ab = vm.abandonedRuns, sc = vm.sleepCalls, sr = srCalls;

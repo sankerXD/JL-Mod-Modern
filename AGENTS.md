@@ -720,6 +720,23 @@ DNF 动画帧表是 `int[][]` 装在 `Vector` 里，客人 `checkcast [[I` 每�
 诊断要点：游戏源码未混淆时直接 javap 找绘制路径上的 catch/println，
 `System.out` 在 logcat 可见、`printStackTrace` 进 `snapvm_err.log`。
 
+**37. DNF 全程 ~4FPS：monitor 唤醒全表扫描 + host 调用全反射（snapvm `acf36db`）**
+现象：游戏 paint 每帧 ~190ms（17.5K ops），host 只占 ~40ms，其余全是
+解释器内部开销；线程 dump/sampler 显示 ~55% 样本停在 `Vm.monExit` 里
+`synchronized(threads)` 的全表遍历。真因：CLDC `Vector` 是客态类且方法
+synchronized，走 cacheFast 路径时每次调用都 monEnter+monExit →
+**每次 Vector.elementAt 都扫一遍全线程表**（DNF 每帧几千次），表随
+死线程只增不减（terminate 不移除）。修法：Monitor 加 `contenders`
+竞争队列，monExit/objWait/releaseMonitors 只唤醒本 monitor 的
+BLOCKED 线程；`reacquire` 补 re-list 防丢唤醒；快照恢复时把 BLOCKED
+线程重挂 contenders。附带：`HostBridge.call0` 的 `Class.forName`
+按 owner 缓存（ART 每次 forName 都走完整 classloader+ICU 路径）；
+`registerLangFastCalls` 给 Object.toString/Integer.parseInt/
+String.equals 等 java.lang 叶子调用跳过反射管线（VmObject 接收者
+有 call0 守卫不受影响）。结果：paint 190ms→~10ms，4FPS→~13FPS
+（回到游戏自身 ~60ms pacing 目标）。诊断手段：9ms 周期的
+`Thread.getAllStackTraces` 采样器按 leaf frame 聚类——比猜热点快。
+
 ### 想要回滚进度时的土办法
 
 功能上做不了，但手动能做：把 `/sdcard/JL-Mod/data/<游戏名>/` 整个文件夹拷走就是一份完整存档，
