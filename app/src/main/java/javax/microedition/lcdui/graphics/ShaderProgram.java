@@ -40,6 +40,8 @@ public class ShaderProgram {
 	public int uTexelDelta;
 	public int uSetting;
 	public int uPixelDelta;
+	/** linked program handle — kept so the renderer can delete it on a live swap */
+	public int id;
 
 	public ShaderProgram(ShaderInfo shader) {
 		if (shader != null) {
@@ -102,6 +104,7 @@ public class ShaderProgram {
 		}
 		glDeleteShader(vertexId);
 		glDeleteShader(fragmentId);
+		id = program;
 		return program;
 	}
 

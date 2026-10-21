@@ -6,6 +6,10 @@
     <string name="action_context_rename">重命名</string>
     <string name="action_context_shortcut">添加到桌面</string>
     <string name="action_keyboard_ime">键盘类型 (IME)</string>
+    <string name="action_shader">着色器</string>
+    <string name="action_native_resolution">原生分辨率</string>
+    <string name="action_scale_settings">缩放设置</string>
+    <string name="action_display_settings">显示设置</string>
     <string name="action_lock_orientation">锁定屏幕旋转</string>
     <string name="action_reinstall">重新安装</string>
     <string name="action_settings">设置</string>
@@ -54,6 +58,12 @@
     <string name="layout_edit_finished">按键布局已保存</string>
     <string name="layout_edit_mode">编辑按键布局</string>
     <string name="layout_scale_mode">调整按键大小</string>
+    <string name="vk_edit_done">完成</string>
+    <string name="vk_edit_discard">放弃</string>
+    <string name="discard">放弃</string>
+    <string name="vk_layout_save_prompt">需要保存键盘布局吗</string>
+    <string name="vk_hide_all">隐藏全部</string>
+    <string name="vk_show_all">显示全部</string>
     <string name="layout_switch">切换按键布局</string>
     <string name="licenses">许可</string>
     <string name="load_profile">加载配置文件</string>
@@ -129,7 +139,7 @@
     <string name="pref_screen_gravity_right">右</string>
     <string name="pref_screen_gravity_top">顶部</string>
     <string name="PREF_SCREEN_OPTIONS">屏幕选项</string>
-    <string name="pref_screen_scale_type">缩放类型</string>
+    <string name="pref_screen_scale_type">缩放设置</string>
     <string name="pref_screen_scale_type_fill">填充窗口 (忽略宽高比)</string>
     <string name="pref_screen_scale_type_fit">适应窗口</string>
     <string name="pref_screen_scale_type_none">按照设置尺寸</string>
@@ -219,7 +229,7 @@
     <string name="version">版本: </string>
     <string name="warn_install_from_net">将从互联网下载文件</string>
     <string name="warning">警告</string>
-    <string name="pref_scale_mode_title">倍率缩放</string>
+    <string name="pref_scale_mode_title">缩放设置</string>
     <string name="pref_scale_mode_summary">全局生效，覆盖每个游戏自己的缩放设置</string>
     <string name="pref_scale_mode_follow">跟随游戏设置</string>
     <string name="pref_scale_mode_stretch">全屏拉伸</string>
@@ -236,6 +246,7 @@
     <string name="shader_follow_global">跟随全局着色器</string>
     <string name="shader_load_file">加载着色器文件…</string>
     <string name="shader_none_selected">当前没有加载着色器</string>
+    <string name="shader_needs_gles">已保存——需「硬件加速（OpenGL ES)」图形模式才生效</string>
     <string name="global_keymap_title">全局按键映射</string>
     <string name="global_keymap_summary">对所有游戏生效；某个游戏单独设置过则以游戏的为准</string>
 </resources>

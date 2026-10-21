@@ -13,6 +13,10 @@
     <string name="action_context_rename">Rename</string>
     <string name="action_context_shortcut">Add shortcut</string>
     <string name="action_keyboard_ime">Keyboard (IME)</string>
+    <string name="action_shader">Shader</string>
+    <string name="action_native_resolution">Native resolution</string>
+    <string name="action_scale_settings">Scaling settings</string>
+    <string name="action_display_settings">Display settings</string>
     <string name="action_lock_orientation">Lock screen rotate</string>
     <string name="action_reinstall">Reinstall</string>
     <string name="action_settings">Settings</string>
@@ -64,6 +68,12 @@
     <string name="layout_edit_finished">Edit mode finished</string>
     <string name="layout_edit_mode">Keylayout edit mode</string>
     <string name="layout_scale_mode">Keylayout resize mode</string>
+    <string name="vk_edit_done">Done</string>
+    <string name="vk_edit_discard">Discard</string>
+    <string name="discard">Discard</string>
+    <string name="vk_layout_save_prompt">Save the key layout?</string>
+    <string name="vk_hide_all">Hide all</string>
+    <string name="vk_show_all">Show all</string>
     <string name="layout_switch">Switch keylayout</string>
     <string name="licenses">Licenses</string>
     <string name="load_profile">Load profile</string>
@@ -151,7 +161,7 @@
     <string name="pref_screen_gravity_top">Top</string>
     <string name="PREF_SCREEN_OPTIONS">Screen options</string>
     <string name="pref_screen_padding_title">Padding</string>
-    <string name="pref_screen_scale_type">Scale type</string>
+    <string name="pref_screen_scale_type">Scaling settings</string>
     <string name="pref_screen_scale_type_fill">Fill window (ignore aspect ratio)</string>
     <string name="pref_screen_scale_type_fit">Fit to window</string>
     <string name="pref_screen_scale_type_none">As is</string>
@@ -273,7 +283,7 @@
     <string name="virtual_key_up" translatable="false">↑</string>
     <string name="warn_install_from_net">File will be downloaded from Internet</string>
     <string name="warning">Warning!</string>
-    <string name="pref_scale_mode_title">Scaling mode</string>
+    <string name="pref_scale_mode_title">Scaling settings</string>
     <string name="pref_scale_mode_summary">Global, applies to all games and overrides the per-game scale type</string>
     <string name="pref_scale_mode_follow">Follow game profile</string>
     <string name="pref_scale_mode_stretch">Stretch to full screen</string>
@@ -290,6 +300,7 @@
     <string name="shader_follow_global">Follow global shader</string>
     <string name="shader_load_file">Load a shader file…</string>
     <string name="shader_none_selected">No shader loaded</string>
+    <string name="shader_needs_gles">Saved — takes effect in HW acceleration (OpenGL ES) mode</string>
     <string name="global_keymap_title">Global key mapping</string>
     <string name="global_keymap_summary">Applies to every game; a game with its own mapping overrides it</string>
 </resources>

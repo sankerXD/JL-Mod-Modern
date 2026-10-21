@@ -55,7 +55,8 @@ public final class BundledShaders {
 	private static final String MARKER_NAME = ".bundled_shaders";
 	private static final String KEY_VERSION = "version";
 	private static final String[] FILES = {
-			"hd.ini", "hd.fsh", "slotmask.ini", "slotmask.fsh", "slotmask.vsh"
+			"hd.ini", "hd.fsh", "slotmask.ini", "slotmask.fsh", "slotmask.vsh",
+			"lcd3x.ini", "lcd3x.fsh", "dither.ini", "dither.fsh"
 	};
 
 	private BundledShaders() {

@@ -832,6 +832,58 @@ public class VirtualKeyboard implements Overlay, Runnable {
 		hide();
 	}
 
+	// in-memory snapshot taken on entering a layout edit session — "discard"
+	// restores it without touching the layout file on disk
+	private RectF[] editBackupRect;
+	private PointF[] editBackupSnapOffset;
+	private int[] editBackupSnapOrigin;
+	private int[] editBackupSnapMode;
+	private boolean[] editBackupVisible;
+	private float[] editBackupKeyScales;
+
+	public void beginLayoutEdit(int mode) {
+		int n = keypad.length;
+		if (editBackupRect == null || editBackupRect.length != n) {
+			editBackupRect = new RectF[n];
+			editBackupSnapOffset = new PointF[n];
+			for (int i = 0; i < n; i++) {
+				editBackupRect[i] = new RectF();
+				editBackupSnapOffset[i] = new PointF();
+			}
+			editBackupSnapOrigin = new int[n];
+			editBackupSnapMode = new int[n];
+			editBackupVisible = new boolean[n];
+		}
+		for (int i = 0; i < n; i++) {
+			VirtualKey k = keypad[i];
+			editBackupRect[i].set(k.rect);
+			editBackupSnapOffset[i].set(k.snapOffset);
+			editBackupSnapOrigin[i] = k.snapOrigin;
+			editBackupSnapMode[i] = k.snapMode;
+			editBackupVisible[i] = k.visible;
+		}
+		editBackupKeyScales = keyScales.clone();
+		setLayoutEditMode(mode);
+	}
+
+	public void discardLayoutEdit() {
+		if (editBackupKeyScales != null) {
+			for (int i = 0; i < keypad.length; i++) {
+				VirtualKey k = keypad[i];
+				k.rect.set(editBackupRect[i]);
+				k.snapOffset.set(editBackupSnapOffset[i]);
+				k.snapOrigin = editBackupSnapOrigin[i];
+				k.snapMode = editBackupSnapMode[i];
+				k.visible = editBackupVisible[i];
+				k.snapValid = false;
+			}
+			System.arraycopy(editBackupKeyScales, 0, keyScales, 0, keyScales.length);
+		}
+		setLayoutEditMode(LAYOUT_EOF);
+		snapKeys();
+		overlayView.postInvalidate();
+	}
+
 	private void resizeKey(int key, float w, float h) {
 		VirtualKey vKey = keypad[key];
 		vKey.resize(w, h);

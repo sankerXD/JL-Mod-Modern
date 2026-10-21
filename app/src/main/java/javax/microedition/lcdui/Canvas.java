@@ -195,6 +195,17 @@ public abstract class Canvas extends Displayable {
 		parallelRedraw = (mode == 0 || mode == 3) && settings.parallelRedrawScreen;
 	}
 
+	/**
+	 * Apply {@code settings.shader} to the live GL pipeline — the program is
+	 * rebuilt on the render thread. No-op when this canvas isn't in GLES mode
+	 * or its surface isn't up yet (onSurfaceCreated picks the value up).
+	 */
+	public void applyShader() {
+		if (renderer != null) {
+			renderer.applyShader();
+		}
+	}
+
 	public int getKeyCode(int gameAction) {
 		int res = KeyMapper.getKeyCode(gameAction);
 		if (res != Integer.MAX_VALUE) {
@@ -864,6 +875,8 @@ public abstract class Canvas extends Displayable {
 		private final int[] bgTextureId = new int[1];
 		private ShaderProgram program;
 		private boolean isStarted;
+		private int surfaceW;
+		private int surfaceH;
 
 		@Override
 		public void onSurfaceCreated(GL10 gl, EGLConfig config) {
@@ -884,6 +897,8 @@ public abstract class Canvas extends Displayable {
 
 		@Override
 		public void onSurfaceChanged(GL10 gl, int width, int height) {
+			surfaceW = width;
+			surfaceH = height;
 			glViewport(0, 0, width, height);
 			SkinLayer skinLayer = SkinLayer.getInstance();
 			int p = skinLayer != null && skinLayer.hasDisplayFrame() ? 0 : settings.screenPadding;
@@ -935,6 +950,37 @@ public abstract class Canvas extends Displayable {
 					}
 				});
 			}
+		}
+
+		/**
+		 * Rebuild the post-processing program from {@code settings.shader} on
+		 * the GL thread — used by the in-game shader picker. Only uniforms and
+		 * the program itself are replaced; texture/vbo state stays.
+		 */
+		void applyShader() {
+			if (!isStarted || mView == null) {
+				return;
+			}
+			mView.queueEvent(() -> {
+				ShaderProgram old = program;
+				program = new ShaderProgram(settings.shader);
+				if (old != null && old.id > 0) {
+					glDeleteProgram(old.id);
+				}
+				glUniform1i(program.uTextureUnit, 0);
+				Bitmap bitmap = offscreenCopy.getBitmap();
+				synchronized (vbo) {
+					program.loadVbo(vbo, bitmap.getWidth(), bitmap.getHeight());
+				}
+				if (program.uPixelDelta >= 0 && surfaceW > 0) {
+					glUniform2f(program.uPixelDelta, 1.0f / surfaceW, 1.0f / surfaceH);
+				}
+				if (settings.shader != null && settings.shader.values != null
+						&& program.uSetting >= 0) {
+					glUniform4fv(program.uSetting, 1, settings.shader.values, 0);
+				}
+				mView.requestRender();
+			});
 		}
 
 		public void requestRender() {

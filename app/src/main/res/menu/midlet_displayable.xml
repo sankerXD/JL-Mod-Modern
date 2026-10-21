@@ -11,24 +11,34 @@
     <item
         android:id="@+id/action_snap_edit"
         android:title="@string/snap_edit" />
-    <item
-        android:id="@+id/action_lock_orientation"
-        android:title="@string/action_lock_orientation"
-        android:checkable="true"
-        android:checked="false" />
     <group android:id="@+id/action_group_canvas">
         <item
-            android:icon="@drawable/ic_action_keyboard"
-            android:id="@+id/action_ime_keyboard"
-            android:title="@string/action_keyboard_ime" />
-        <item
-            android:icon="@drawable/ic_action_screenshot"
-            android:id="@+id/action_take_screenshot"
-            android:title="@string/take_screenshot" />
-
-        <item
-            android:id="@+id/action_limit_fps"
-            android:title="@string/PREF_LIMIT_FPS" />
+            android:id="@+id/action_submenu_display"
+            android:title="@string/action_display_settings">
+            <menu>
+                <item
+                    android:id="@+id/action_lock_orientation"
+                    android:title="@string/action_lock_orientation"
+                    android:checkable="true"
+                    android:checked="false" />
+                <item
+                    android:id="@+id/action_native_resolution"
+                    android:title="@string/action_native_resolution" />
+                <item
+                    android:id="@+id/action_scale_settings"
+                    android:title="@string/action_scale_settings" />
+                <item
+                    android:id="@+id/action_shader"
+                    android:title="@string/action_shader" />
+                <item
+                    android:icon="@drawable/ic_action_screenshot"
+                    android:id="@+id/action_take_screenshot"
+                    android:title="@string/take_screenshot" />
+                <item
+                    android:id="@+id/action_limit_fps"
+                    android:title="@string/PREF_LIMIT_FPS" />
+            </menu>
+        </item>
 
         <item
             android:id="@+id/action_save_log"
@@ -44,9 +54,6 @@
                 <item
                     android:id="@+id/action_layout_scale_mode"
                     android:title="@string/layout_scale_mode" />
-                <item
-                    android:id="@+id/action_layout_edit_finish"
-                    android:title="@string/layout_edit_finish" />
                 <item
                     android:id="@+id/action_layout_switch"
                     android:title="@string/layout_switch" />

@@ -15,6 +15,7 @@ import java.util.TimeZone;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import javax.microedition.lcdui.AlertType;
 import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.Display;
 import javax.microedition.lcdui.Font;
@@ -59,6 +60,7 @@ public final class SnapHandles {
 		vm.registerHostHandle(Player.class, new PlayerHandle());
 		vm.registerHostHandle(Calendar.class, new CalendarHandle());
 		vm.registerHostHandle(Timer.class, new TimerHandle());
+		vm.registerHostHandle(AlertType.class, new AlertTypeHandle());
 		// game package: all-private int/Image field state — generic
 		// reflective capture covers them without Unsafe.
 		vm.registerHostHandle(Sprite.class,
@@ -174,6 +176,36 @@ public final class SnapHandles {
 
 		public Object revive(Vm vm, Object rec) {
 			return new Ticker((String) rec);
+		}
+	}
+
+	/**
+	 * AlertType constants are static singletons — round-trip by field name so
+	 * the revived value IS the canonical instance (ALARM/INFO/...). Needed
+	 * because an Alert subclass's super-<init> args carry one.
+	 */
+	private static final class AlertTypeHandle implements HostHandle {
+		public Object capture(Vm vm, Object h) {
+			for (Field f : AlertType.class.getDeclaredFields()) {
+				if (!Modifier.isStatic(f.getModifiers())) {
+					continue;
+				}
+				try {
+					if (f.get(null) == h) {
+						return f.getName();
+					}
+				} catch (Exception ignored) {
+				}
+			}
+			throw new VmError("unknown AlertType instance");
+		}
+
+		public Object revive(Vm vm, Object rec) {
+			try {
+				return AlertType.class.getField((String) rec).get(null);
+			} catch (Exception e) {
+				throw new VmError("AlertType revive failed: " + rec, e);
+			}
 		}
 	}
 

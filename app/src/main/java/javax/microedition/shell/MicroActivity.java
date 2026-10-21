@@ -58,6 +58,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.activity.result.ActivityResultLauncher;
 import androidx.annotation.NonNull;
 import androidx.annotation.StringRes;
 import androidx.appcompat.app.ActionBar;
@@ -77,17 +78,22 @@ import org.acra.ErrorReporter;
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
 import javax.microedition.lcdui.Canvas;
+import javax.microedition.lcdui.Display;
 import javax.microedition.lcdui.Displayable;
 import javax.microedition.lcdui.Form;
 import javax.microedition.lcdui.ViewHandler;
+import javax.microedition.lcdui.event.CanvasEvent;
 import javax.microedition.lcdui.event.SimpleEvent;
 import javax.microedition.lcdui.keyboard.TriggerAxisHandler;
 import javax.microedition.lcdui.keyboard.VirtualKeyboard;
@@ -101,10 +107,16 @@ import io.reactivex.disposables.Disposable;
 import ru.playsoftware.j2meloader.BuildConfig;
 import ru.playsoftware.j2meloader.R;
 import ru.playsoftware.j2meloader.config.Config;
+import ru.playsoftware.j2meloader.config.ProfileModel;
+import ru.playsoftware.j2meloader.config.ProfilesManager;
+import ru.playsoftware.j2meloader.config.ShaderInfo;
+import ru.playsoftware.j2meloader.config.ShaderList;
+import ru.playsoftware.j2meloader.config.model.Size;
 import ru.playsoftware.j2meloader.databinding.ActivityMicroBinding;
 import ru.playsoftware.j2meloader.databinding.DialogInputBinding;
 import ru.playsoftware.j2meloader.util.Constants;
 import ru.playsoftware.j2meloader.util.LogUtils;
+import ru.playsoftware.j2meloader.util.PickFileResultContract;
 
 public class MicroActivity extends AppCompatActivity {
 	private static final int ORIENTATION_DEFAULT = 0;
@@ -127,6 +139,9 @@ public class MicroActivity extends AppCompatActivity {
 	private BroadcastReceiver keyInjector;
 	private Menu drawerMenu;
 	private int drawerMode;
+	private final PickFileResultContract shaderPickerContract = new PickFileResultContract();
+	private final ActivityResultLauncher<String[]> shaderPicker =
+			registerForActivityResult(shaderPickerContract, this::onShaderPicked);
 
 	private static final int MODE_MAIN = 0;
 	private static final int MODE_SNAP_SAVE = 1;
@@ -198,10 +213,14 @@ public class MicroActivity extends AppCompatActivity {
 		if (vk != null) {
 			vk.setView(binding.overlay);
 			binding.overlay.addLayer(vk);
+			flashHideAllButton();
 			if (vk.isPhone()) {
 				orientation = ORIENTATION_PORTRAIT;
 			}
 		}
+		binding.vkEditDone.setOnClickListener(v -> endVkLayoutEdit(true));
+		binding.vkEditDiscard.setOnClickListener(v -> endVkLayoutEdit(false));
+		binding.vkHideAll.setOnClickListener(v -> toggleHideAllKeys());
 		setOrientation(orientation);
 		menuKey = microLoader.getMenuKeyCode();
 		inputMethodManager = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
@@ -266,6 +285,10 @@ public class MicroActivity extends AppCompatActivity {
 		visible = false;
 		triggerAxes.release(this);
 		hideSoftInput();
+		VirtualKeyboard vk = ContextHolder.getVk();
+		if (vk != null && vk.getLayoutEditMode() != VirtualKeyboard.LAYOUT_EOF) {
+			endVkLayoutEdit(false);
+		}
 		MidletThread.pauseApp();
 		super.onPause();
 	}
@@ -423,6 +446,15 @@ public class MicroActivity extends AppCompatActivity {
 			return true;
 		}
 		return super.dispatchGenericMotionEvent(event);
+	}
+
+	@Override
+	public boolean dispatchTouchEvent(MotionEvent event) {
+		// any touch on the game window wakes the hide-all toggle for a bit
+		if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+			flashHideAllButton();
+		}
+		return super.dispatchTouchEvent(event);
 	}
 
 	@Override
@@ -729,11 +761,7 @@ public class MicroActivity extends AppCompatActivity {
 		MenuInflater inflater = getMenuInflater();
 		inflater.inflate(R.menu.midlet_displayable, menu);
 		if (actionBarEnabled) {
-			menu.findItem(R.id.action_ime_keyboard).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
 			menu.findItem(R.id.action_take_screenshot).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
-		}
-		if (inputMethodManager == null) {
-			menu.findItem(R.id.action_ime_keyboard).setVisible(false);
 		}
 		if (ContextHolder.getVk() == null) {
 			menu.findItem(R.id.action_submenu_vk).setVisible(false);
@@ -750,11 +778,6 @@ public class MicroActivity extends AppCompatActivity {
 	public boolean onPrepareOptionsMenu(Menu menu) {
 		if (current instanceof Canvas) {
 			menu.setGroupVisible(R.id.action_group_canvas, true);
-			VirtualKeyboard vk = ContextHolder.getVk();
-			if (vk != null) {
-				boolean visible = vk.getLayoutEditMode() != VirtualKeyboard.LAYOUT_EOF;
-				menu.findItem(R.id.action_layout_edit_finish).setVisible(visible);
-			}
 		} else {
 			menu.setGroupVisible(R.id.action_group_canvas, false);
 		}
@@ -764,6 +787,13 @@ public class MicroActivity extends AppCompatActivity {
 	@Override
 	public boolean onOptionsItemSelected(@NonNull MenuItem item) {
 		int id = item.getItemId();
+		VirtualKeyboard vkEdit = ContextHolder.getVk();
+		if (vkEdit != null && vkEdit.getLayoutEditMode() != VirtualKeyboard.LAYOUT_EOF) {
+			// a layout edit session is active — ask whether to keep it
+			// before running whatever the user picked in the drawer
+			confirmLayoutEditThen(item);
+			return true;
+		}
 		if (id == R.id.action_exit_midlet) {
 			showExitConfirmation();
 		} else if (id == R.id.action_save_log) {
@@ -784,9 +814,12 @@ public class MicroActivity extends AppCompatActivity {
 				lockOrientation();
 				item.setChecked(true);
 			}
-		} else if (id == R.id.action_ime_keyboard) {
-			inputMethodManager.toggleSoftInputFromWindow(binding.displayableContainer.getWindowToken(),
-					InputMethodManager.SHOW_FORCED, 0);
+		} else if (id == R.id.action_shader) {
+			showShaderDialog();
+		} else if (id == R.id.action_native_resolution) {
+			showNativeResolutionDialog();
+		} else if (id == R.id.action_scale_settings) {
+			showScaleSettingsDialog();
 		} else if (id == R.id.action_take_screenshot) {
 			takeScreenshot();
 		} else if (id == R.id.action_limit_fps) {
@@ -799,6 +832,174 @@ public class MicroActivity extends AppCompatActivity {
 	}
 
 
+
+	/**
+	 * In-game shader switcher — same resolution rules as the config screen
+	 * (per-game file wins; "follow global" resolves the global preference).
+	 * The pick is applied live on the GL thread and written back to the
+	 * game's config.json so it survives relaunch.
+	 */
+	private void showShaderDialog() {
+		final String[] items = {
+				getString(R.string.shader_follow_global),
+				getString(R.string.shader_load_file),
+		};
+		new AlertDialog.Builder(this)
+				.setTitle(R.string.PREF_SHADER_FILTER)
+				.setItems(items, (dialog, which) -> {
+					if (which == 0) {
+						microLoader.params.shader = null;
+						applyShaderChanged();
+					} else {
+						pickShaderFile();
+					}
+				})
+				.show();
+	}
+
+	private void pickShaderFile() {
+		shaderPickerContract.setStartPath(microLoader.getShadersDir());
+		shaderPicker.launch(new String[]{".ini"});
+	}
+
+	private void onShaderPicked(Uri uri) {
+		if (uri == null || uri.getPath() == null) {
+			return;
+		}
+		File file = new File(uri.getPath());
+		String error = ShaderList.validate(file);
+		if (error != null) {
+			new AlertDialog.Builder(this)
+					.setTitle(R.string.shader_load_failed)
+					.setMessage(error)
+					.setPositiveButton(android.R.string.ok, null)
+					.show();
+			return;
+		}
+		microLoader.params.shader = ShaderList.loadIni(file);
+		applyShaderChanged();
+	}
+
+	private void applyShaderChanged() {
+		microLoader.reloadShader();
+		ProfilesManager.saveConfig(microLoader.params);
+		ShaderInfo shader = microLoader.params.shader;
+		if (current instanceof Canvas) {
+			((Canvas) current).applyShader();
+		}
+		if (microLoader.params.graphicsMode != 1) {
+			Toast.makeText(this, R.string.shader_needs_gles, Toast.LENGTH_LONG).show();
+			return;
+		}
+		Toast.makeText(this, shader == null
+						? getString(R.string.shader_none_selected)
+						: getString(R.string.shader_loaded, shader.getName()),
+				Toast.LENGTH_SHORT).show();
+	}
+
+	/**
+	 * In-game virtual-resolution switcher. The jar does not declare supported
+	 * resolutions (verified across the library — manifests carry none), so the
+	 * list is the same preset set the config screen offers. Picking a size
+	 * updates the guest-visible getWidth/getHeight live, fires sizeChanged to
+	 * the MIDlet and persists to the game's config.json.
+	 */
+	private void showNativeResolutionDialog() {
+		List<Size> presets = collectResolutionPresets();
+		String[] labels = new String[presets.size()];
+		for (int i = 0; i < labels.length; i++) {
+			labels[i] = presets.get(i).toString();
+		}
+		ProfileModel params = microLoader.params;
+		new AlertDialog.Builder(this)
+				.setTitle(getString(R.string.action_native_resolution)
+						+ "（" + params.screenWidth + " x " + params.screenHeight + "）")
+				.setItems(labels, (dialog, which) ->
+						applyNativeResolution(presets.get(which)))
+				.show();
+	}
+
+	private void applyNativeResolution(Size size) {
+		ProfileModel params = microLoader.params;
+		params.screenWidth = size.width;
+		params.screenHeight = size.height;
+		Displayable.setVirtualSize(size.width, size.height);
+		if (current instanceof Canvas) {
+			Canvas c = (Canvas) current;
+			c.updateSize();
+			Display.postEvent(CanvasEvent.getInstance(c,
+					CanvasEvent.SIZE_CHANGED, c.getWidth(), c.getHeight()));
+		}
+		ProfilesManager.saveConfig(params);
+		Toast.makeText(this, getString(R.string.action_native_resolution)
+				+ ": " + size, Toast.LENGTH_SHORT).show();
+	}
+
+	/**
+	 * In-game scale-type switcher — same options as the per-game config
+	 * (none/fit/fill) plus integer scaling. Only the screen mapping is
+	 * recalculated; the guest canvas size stays untouched, so no SIZE_CHANGED.
+	 */
+	private void showScaleSettingsDialog() {
+		String[] base = getResources().getStringArray(R.array.pref_scale_type_entries);
+		String[] items = Arrays.copyOf(base, base.length + 1);
+		items[base.length] = getString(R.string.pref_scale_mode_integer);
+		int cur = microLoader.params.screenScaleType;
+		new AlertDialog.Builder(this)
+				.setTitle(R.string.action_scale_settings)
+				.setSingleChoiceItems(items, cur >= 0 && cur < items.length ? cur : -1,
+						(dialog, which) -> {
+							microLoader.params.screenScaleType = which;
+							if (which == 3) {
+								// integer scaling looks broken unless centered
+								microLoader.params.screenGravity = 2;
+							}
+							if (current instanceof Canvas) {
+								((Canvas) current).updateSize();
+							}
+							ProfilesManager.saveConfig(microLoader.params);
+							dialog.dismiss();
+						})
+				.show();
+	}
+
+	private List<Size> collectResolutionPresets() {
+		ArrayList<Size> presets = new ArrayList<>(Arrays.asList(
+				new Size(128, 128), new Size(128, 160), new Size(132, 176),
+				new Size(176, 208), new Size(176, 220), new Size(240, 320),
+				new Size(240, 400), new Size(320, 240), new Size(352, 416),
+				new Size(360, 640), new Size(640, 360), new Size(800, 480)));
+		int w = getResources().getDisplayMetrics().widthPixels;
+		int h = getResources().getDisplayMetrics().heightPixels;
+		if (w > h) {
+			presets.add(new Size(h * 3 / 4, h));
+			presets.add(new Size(h * 4 / 3, h));
+		} else {
+			presets.add(new Size(w, w * 4 / 3));
+			presets.add(new Size(w, w * 3 / 4));
+		}
+		presets.add(new Size(w, h));
+		Set<String> user = PreferenceManager.getDefaultSharedPreferences(this)
+				.getStringSet("ResolutionsPreset", null);
+		if (user != null) {
+			for (String s : user) {
+				Size size = Size.parse(s);
+				if (size != null) {
+					presets.add(size);
+				}
+			}
+		}
+		Collections.sort(presets);
+		ArrayList<Size> out = new ArrayList<>();
+		Size prev = null;
+		for (Size s : presets) {
+			if (!s.equals(prev)) {
+				out.add(s);
+			}
+			prev = s;
+		}
+		return out;
+	}
 
 	private void lockOrientation() {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
@@ -836,20 +1037,131 @@ public class MicroActivity extends AppCompatActivity {
 	private void handleVkOptions(int id) {
 		VirtualKeyboard vk = ContextHolder.getVk();
 		if (id == R.id.action_layout_edit_mode) {
-			vk.setLayoutEditMode(VirtualKeyboard.LAYOUT_KEYS);
+			beginVkLayoutEdit(VirtualKeyboard.LAYOUT_KEYS);
 			Toast.makeText(this, R.string.layout_edit_mode, Toast.LENGTH_SHORT).show();
 		} else if (id == R.id.action_layout_scale_mode) {
-			vk.setLayoutEditMode(VirtualKeyboard.LAYOUT_SCALES);
+			beginVkLayoutEdit(VirtualKeyboard.LAYOUT_SCALES);
 			Toast.makeText(this, R.string.layout_scale_mode, Toast.LENGTH_SHORT).show();
-		} else if (id == R.id.action_layout_edit_finish) {
-			vk.setLayoutEditMode(VirtualKeyboard.LAYOUT_EOF);
-			Toast.makeText(this, R.string.layout_edit_finished, Toast.LENGTH_SHORT).show();
-			showSaveVkAlert(false);
 		} else if (id == R.id.action_layout_switch) {
 			showSetLayoutDialog();
 		} else if (id == R.id.action_hide_buttons) {
 			showHideButtonDialog();
 		}
+	}
+
+	/**
+	 * Freezes the game (SnapVM: hard freeze of the guest VM; dex path:
+	 * pauseApp) and shows the on-screen done/discard bar while the key
+	 * layout is being edited.
+	 */
+	private void beginVkLayoutEdit(int mode) {
+		VirtualKeyboard vk = ContextHolder.getVk();
+		if (vk == null) {
+			return;
+		}
+		vk.beginLayoutEdit(mode);
+		binding.vkEditBar.setVisibility(View.VISIBLE);
+		// take the hide-all toggle away while editing — toggling key
+		// visibility mid-edit makes no sense (all keys are shown anyway)
+		binding.vkHideAll.removeCallbacks(vkHideAllFadeOut);
+		binding.vkHideAll.setVisibility(View.GONE);
+		setGameFrozen(true);
+	}
+
+	private void endVkLayoutEdit(boolean save) {
+		VirtualKeyboard vk = ContextHolder.getVk();
+		if (vk == null) {
+			return;
+		}
+		if (save) {
+			vk.setLayoutEditMode(VirtualKeyboard.LAYOUT_EOF);
+			if (vk.isPhone()) {
+				showSaveVkAlert(false);
+			} else {
+				vk.onLayoutChanged(VirtualKeyboard.TYPE_CUSTOM);
+				Toast.makeText(this, R.string.layout_edit_finished, Toast.LENGTH_SHORT).show();
+			}
+		} else {
+			vk.discardLayoutEdit();
+		}
+		binding.vkEditBar.setVisibility(View.GONE);
+		setGameFrozen(false);
+		flashHideAllButton();
+	}
+
+	private void setGameFrozen(boolean frozen) {
+		if (SnapVm.instance() != null) {
+			SnapVm.setFrozen(frozen);
+		} else if (frozen) {
+			MidletThread.pauseApp();
+		} else {
+			MidletThread.resumeApp();
+		}
+	}
+
+	private void confirmLayoutEditThen(MenuItem item) {
+		new AlertDialog.Builder(this)
+				.setMessage(R.string.vk_layout_save_prompt)
+				.setPositiveButton(R.string.save, (d, w) -> {
+					endVkLayoutEdit(true);
+					onOptionsItemSelected(item);
+				})
+				.setNegativeButton(R.string.discard, (d, w) -> {
+					endVkLayoutEdit(false);
+					onOptionsItemSelected(item);
+				})
+				.setNeutralButton(R.string.CANCEL_CMD, (d, w) -> {
+					// the drawer already flipped checkable items — revert so
+					// the checkbox still reflects reality
+					if (item.isCheckable()) {
+						item.setChecked(!item.isChecked());
+					}
+				})
+				.show();
+	}
+
+	private final Runnable vkHideAllFadeOut =
+			() -> binding.vkHideAll.setVisibility(View.GONE);
+
+	private static boolean allKeysHidden(VirtualKeyboard vk) {
+		for (boolean hidden : vk.getKeysVisibility()) {
+			if (!hidden) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Shows the hide-all toggle and refreshes its label. While keys are
+	 * visible it simply stays on screen alongside the keyboard; once every
+	 * key is hidden it fades out after a few seconds — any touch on the game
+	 * window re-arms it so the "show all" escape hatch is never lost.
+	 */
+	private void flashHideAllButton() {
+		VirtualKeyboard vk = ContextHolder.getVk();
+		if (vk == null || vk.getLayoutEditMode() != VirtualKeyboard.LAYOUT_EOF) {
+			return;
+		}
+		binding.vkHideAll.setText(
+				allKeysHidden(vk) ? R.string.vk_show_all : R.string.vk_hide_all);
+		binding.vkHideAll.setVisibility(View.VISIBLE);
+		binding.vkHideAll.removeCallbacks(vkHideAllFadeOut);
+		if (allKeysHidden(vk)) {
+			binding.vkHideAll.postDelayed(vkHideAllFadeOut, 3000);
+		}
+	}
+
+	private void toggleHideAllKeys() {
+		VirtualKeyboard vk = ContextHolder.getVk();
+		if (vk == null) {
+			return;
+		}
+		boolean[] states = vk.getKeysVisibility();
+		Arrays.fill(states, !allKeysHidden(vk));
+		vk.setKeysVisibility(states);
+		vk.onLayoutChanged(VirtualKeyboard.TYPE_CUSTOM);
+		flashHideAllButton();
 	}
 
 	@SuppressLint("CheckResult")
@@ -896,6 +1208,7 @@ public class MicroActivity extends AppCompatActivity {
 						vk.setKeysVisibility(changed);
 						showSaveVkAlert(true);
 					}
+					flashHideAllButton();
 				}).show();
 	}
 
@@ -938,6 +1251,7 @@ public class MicroActivity extends AppCompatActivity {
 				.setSingleChoiceItems(R.array.PREF_VK_TYPE_ENTRIES, vk.getLayout(), null)
 				.setPositiveButton(android.R.string.ok, (d, w) -> {
 					vk.setLayout(((AlertDialog) d).getListView().getCheckedItemPosition());
+					flashHideAllButton();
 					if (vk.isPhone()) {
 						setOrientation(ORIENTATION_PORTRAIT);
 					} else {

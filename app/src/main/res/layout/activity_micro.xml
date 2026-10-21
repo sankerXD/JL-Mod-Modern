@@ -42,6 +42,44 @@
             android:id="@+id/overlay"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
+
+        <!-- shown while a keyboard layout edit session is active -->
+        <LinearLayout
+            android:id="@+id/vk_edit_bar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|center_horizontal"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/vk_edit_done"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/vk_edit_done" />
+
+            <Button
+                android:id="@+id/vk_edit_discard"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/vk_edit_discard" />
+        </LinearLayout>
+
+        <!-- quick toggle: hide/show every virtual key — right side, upper
+             area; translucent like the keys themselves -->
+        <Button
+            android:id="@+id/vk_hide_all"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="64dp"
+            android:layout_marginEnd="4dp"
+            android:background="@drawable/vk_hide_all_bg"
+            android:minWidth="0dp"
+            android:text="@string/vk_hide_all"
+            android:textColor="#66000080"
+            android:textSize="12sp"
+            android:visibility="gone" />
     </FrameLayout>
 
     <!-- left edge swipe drawer: replaces the top action bar -->
