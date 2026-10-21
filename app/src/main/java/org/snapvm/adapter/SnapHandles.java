@@ -8,8 +8,12 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.TimeZone;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.Display;
@@ -27,6 +31,7 @@ import javax.microedition.media.protocol.DataSource;
 import javax.microedition.rms.RecordListener;
 import javax.microedition.rms.RecordStore;
 
+import org.snapvm.GuestShadow;
 import org.snapvm.HostHandle;
 import org.snapvm.Vm;
 import org.snapvm.VmError;
@@ -53,6 +58,7 @@ public final class SnapHandles {
 		vm.registerHostHandle(RecordStore.class, new RmsHandle());
 		vm.registerHostHandle(Player.class, new PlayerHandle());
 		vm.registerHostHandle(Calendar.class, new CalendarHandle());
+		vm.registerHostHandle(Timer.class, new TimerHandle());
 		// game package: all-private int/Image field state — generic
 		// reflective capture covers them without Unsafe.
 		vm.registerHostHandle(Sprite.class,
@@ -318,6 +324,73 @@ public final class SnapHandles {
 			} catch (Exception e) {
 				throw new VmError("Player revive failed", e);
 			}
+		}
+	}
+
+	/**
+	 * java.util.Timer: the Harmony-derived impl on Android keeps a
+	 * TimerImpl thread with a TimerHeap of pending tasks. Captures each
+	 * pending SnapTimerTaskShadow's guest object plus when/period/fixedRate;
+	 * revive schedules the rebuilt shadows onto a fresh Timer. Tasks whose
+	 * shadow is missing (never seen by the snapshot graph) are skipped.
+	 */
+	private static final class TimerHandle implements HostHandle {
+		public Object capture(Vm vm, Object h) {
+			try {
+				List<Object[]> recs = new ArrayList<>();
+				// alias-installed impl: task schedule params were recorded at
+				// schedule() time — no reflection into JDK internals (ART
+				// returns empty getDeclaredFields for java.util.Timer).
+				SnapTimer st = (SnapTimer) h;
+				st.dropDead();
+				synchronized (st.armed) {
+					for (Map.Entry<TimerTask, SnapTimer.Meta> e
+							: st.armed.entrySet()) {
+						TimerTask task = e.getKey();
+						SnapTimer.Meta m = e.getValue();
+						Object guest = task instanceof GuestShadow
+								? ((GuestShadow) task).guest() : null;
+						if (guest == null) {
+							continue;
+						}
+						// a one-shot that already fired is done — JDK removed
+						// it from the heap, so drop it here too
+						if (m.period < 0 && task instanceof SnapTimerTaskShadow
+								&& ((SnapTimerTaskShadow) task).ranOnce()) {
+							continue;
+						}
+						recs.add(new Object[]{guest, m.when, m.period,
+								m.fixedRate});
+					}
+				}
+				return recs.toArray();
+			} catch (Exception e) {
+				throw new VmError("Timer capture failed", e);
+			}
+		}
+
+		public Object revive(Vm vm, Object rec) {
+			Timer t = new SnapTimer();
+			for (Object o : (Object[]) rec) {
+				Object[] r = (Object[]) o;
+				Object shadow = ((org.snapvm.VmObject) r[0]).hostShadow;
+				if (!(shadow instanceof TimerTask)) {
+					continue;
+				}
+				TimerTask task = (TimerTask) shadow;
+				long when = (Long) r[1], period = (Long) r[2];
+				if (period <= 0) {
+					t.schedule(task, new Date(when));
+				} else {
+					long delay = Math.max(0L, when - System.currentTimeMillis());
+					if ((Boolean) r[3]) {
+						t.scheduleAtFixedRate(task, delay, period);
+					} else {
+						t.schedule(task, delay, period);
+					}
+				}
+			}
+			return t;
 		}
 	}
 

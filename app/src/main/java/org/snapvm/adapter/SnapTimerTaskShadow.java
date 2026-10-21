@@ -20,6 +20,8 @@ public final class SnapTimerTaskShadow extends TimerTask implements GuestShadow 
 
 	private final Vm vm;
 	private final VmObject guest;
+	private volatile boolean guestCancelled;
+	private volatile boolean ranOnce;
 
 	public SnapTimerTaskShadow(Vm vm, VmObject guest) {
 		this.vm = vm;
@@ -31,8 +33,32 @@ public final class SnapTimerTaskShadow extends TimerTask implements GuestShadow 
 		return guest;
 	}
 
+	/** TimerTask.cancel() — guest-side or JDK's own cancel-on-exception path. */
+	@Override
+	public boolean cancel() {
+		guestCancelled = true;
+		return super.cancel();
+	}
+
+	public boolean isGuestCancelled() {
+		return guestCancelled;
+	}
+
+	/** True once the Timer thread has entered run() — one-shots are done then. */
+	public boolean ranOnce() {
+		return ranOnce;
+	}
+
 	@Override
 	public void run() {
+		// After a snapshot restore this shadow's guest belongs to a dead
+		// epoch — self-cancel so the orphaned host Timer thread drains out
+		// instead of spinning on dropped calls forever.
+		if (guest.isStale()) {
+			cancel();
+			return;
+		}
+		ranOnce = true;
 		try {
 			vm.callFromHost(guest, "run", "()V");
 		} catch (Throwable th) {

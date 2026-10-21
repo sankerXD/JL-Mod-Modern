@@ -26,11 +26,27 @@ public class TriangleStripArray extends IndexBuffer {
 		super(_createImplicit(Interface.getHandle(),
 				firstIndex,
 				stripLengths));
+		this.stripLengths = stripLengths.clone();
+		this.firstIndex = firstIndex;
+		this.implicit = true;
 	}
 
 	public TriangleStripArray(final int[] indices, final int[] stripLengths) {
 		super(_createExplicit(Interface.getHandle(), indices, stripLengths));
+		this.indices = indices.clone();
+		this.stripLengths = stripLengths.clone();
+		this.implicit = false;
 	}
+
+	// Kept for snapshot replay: the API has no stripLengths getter, and the
+	// caller may reuse/mutate the arrays after construction — clone eagerly.
+	// implicit ctor records firstIndex so revive can replay the same call.
+	// Explicit ctor records the raw indices: getIndices() only exposes the
+	// expanded triangle list, which is NOT a valid strip stream to re-feed.
+	int[] indices;
+	int[] stripLengths;
+	int firstIndex;
+	boolean implicit;
 
 	TriangleStripArray(long handle) {
 		super(handle);

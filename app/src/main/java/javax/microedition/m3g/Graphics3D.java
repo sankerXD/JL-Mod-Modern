@@ -58,6 +58,13 @@ public class Graphics3D {
 	private Destroyer destroyer;
 	private Interface iInterface;
 
+	// Snapshot caches: m3g keeps these native-side only, which a HostHandle
+	// codec cannot read back. Mirror the caller-visible arguments so
+	// SnapM3gHandles can re-bind a restored instance faithfully.
+	private int vpX, vpY, vpW, vpH;
+	private Transform cameraTransform;
+	private final Vector<Transform> lightTransforms = new Vector<>();
+
 	// this flag is for identification of image target types
 	// - True for mutable off-screen images
 	// - False for canvas/GameCanvas framebuffer
@@ -254,6 +261,10 @@ public class Graphics3D {
 			throw new IllegalArgumentException();
 		}
 		_setViewport(handle, x + offsetX, y + offsetY, width, height);
+		vpX = x;
+		vpY = y;
+		vpW = width;
+		vpH = height;
 	}
 
 	/**
@@ -364,6 +375,7 @@ public class Graphics3D {
 				transform != null ? transform.matrix : null);
 
 		this.camera = camera;
+		this.cameraTransform = transform;
 	}
 
 	/**
@@ -377,6 +389,10 @@ public class Graphics3D {
 			lights.setSize(index + 1);
 		}
 		lights.setElementAt(light, index);
+		if (lightTransforms.size() <= index) {
+			lightTransforms.setSize(index + 1);
+		}
+		lightTransforms.setElementAt(transform, index);
 		return index;
 	}
 
@@ -390,6 +406,10 @@ public class Graphics3D {
 				light != null ? light.handle : 0,
 				transform != null ? transform.matrix : null);
 		lights.setElementAt(light, index);
+		if (lightTransforms.size() <= index) {
+			lightTransforms.setSize(index + 1);
+		}
+		lightTransforms.setElementAt(transform, index);
 	}
 
 	/**
@@ -398,6 +418,7 @@ public class Graphics3D {
 		integrityCheck();
 		_resetLights(handle);
 		lights.removeAllElements();
+		lightTransforms.removeAllElements();
 	}
 
 	/**

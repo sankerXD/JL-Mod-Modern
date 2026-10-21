@@ -42,10 +42,12 @@ public class Image2D extends Object3D {
 		// otherwise throws exception Done this way because class of
 		// image cannot be checked befor calling super()
 		super(Image2D.checkAndCreate(format, image));
+		this.srcImage = image;
 	}
 
 	public Image2D(int format, int width, int height, byte[] image) {
 		super(createHandle(format, width, height, image));
+		this.srcPixels = image;
 	}
 
 	public Image2D(int format,
@@ -53,11 +55,19 @@ public class Image2D extends Object3D {
 				   byte[] image,
 				   byte[] palette) {
 		super(createHandle(format, width, height, image, palette));
+		this.srcPixels = image;
+		this.srcPalette = palette;
 	}
 
 	public Image2D(int format, int width, int height) {
 		super(createHandle(format, width, height));
 	}
+
+	// Snapshot caches: constructor sources so a HostHandle codec can rebuild
+	// an identical native image (the API has no pixel read-back).
+	java.lang.Object srcImage;
+	byte[] srcPixels;
+	byte[] srcPalette;
 
 	Image2D(long handle) {
 		super(handle);
@@ -72,6 +82,17 @@ public class Image2D extends Object3D {
 			throw new NullPointerException();
 		}
 		_set(handle, x, y, width, height, image);
+		// keep the snapshot cache in sync for mutable images
+		if (srcPixels == null) {
+			srcPixels = new byte[getWidth() * getHeight()
+					* getBytesPerPixel(getFormat())];
+		}
+		int bpp = getBytesPerPixel(getFormat());
+		int imgW = getWidth() * bpp, srcStride = width * bpp;
+		for (int row = 0; row < height; row++) {
+			System.arraycopy(image, row * srcStride, srcPixels,
+					(y + row) * imgW + x * bpp, srcStride);
+		}
 	}
 
 	public boolean isMutable() {
