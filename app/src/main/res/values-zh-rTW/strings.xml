@@ -110,4 +110,18 @@
     <string name="SWAP_SIZES">交換呎吋</string>
     <string name="take_screenshot">屏幕截圖</string>
     <string name="version">版本： </string>
+    <string name="snap_save">即時存檔</string>
+    <string name="snap_load">讀取即時存檔</string>
+    <string name="snap_edit">編輯即時存檔</string>
+    <string name="snap_saved">已存檔</string>
+    <string name="snap_loaded">已讀檔</string>
+    <string name="snap_failed">存檔/讀檔失敗</string>
+    <string name="snap_back">返回</string>
+    <string name="snap_auto_name">存檔%1$d-%2$s</string>
+    <string name="snap_overwrite">是否覆蓋當前存檔？</string>
+    <string name="snap_rename">重新命名</string>
+    <string name="snap_delete">刪除存檔</string>
+    <string name="snap_delete_msg">確定刪除這個存檔嗎？</string>
+    <string name="snap_deleted">已刪除</string>
+    <string name="exit_confirm">真的要退出嗎？</string>
 </resources>

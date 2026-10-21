@@ -216,10 +216,20 @@
     <string name="save">Save</string>
     <string name="save_log">Save log</string>
     <string name="snap_save">Save state</string>
-    <string name="snap_load">Load state</string>
+    <string name="snap_load">Load save state</string>
+    <string name="snap_edit">Edit save states</string>
     <string name="snap_saved">State saved</string>
     <string name="snap_loaded">State loaded</string>
     <string name="snap_failed">Save/load failed</string>
+    <string name="snap_back">‹ Back</string>
+    <string name="snap_slot_empty" translatable="false">————————</string>
+    <string name="snap_auto_name">Save %1$d · %2$s</string>
+    <string name="snap_overwrite">Overwrite this save state?</string>
+    <string name="snap_rename">Rename</string>
+    <string name="snap_delete">Delete save</string>
+    <string name="snap_delete_msg">Delete this save state?</string>
+    <string name="snap_deleted">Save deleted</string>
+    <string name="exit_confirm">Really quit?</string>
     <string name="save_profile">Save profile</string>
     <string name="saved">Saved %1$s</string>
     <string name="scoped_storage_warning">Your user data is stored in a location which <b>will be deleted</b> when you uninstall the app:\n</string>

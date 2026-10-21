@@ -76,8 +76,12 @@ import org.acra.ErrorReporter;
 
 import java.io.File;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 import javax.microedition.lcdui.Canvas;
@@ -121,6 +125,13 @@ public class MicroActivity extends AppCompatActivity {
 	private String appPath;
 	private ActivityMicroBinding binding;
 	private BroadcastReceiver keyInjector;
+	private Menu drawerMenu;
+	private int drawerMode;
+
+	private static final int MODE_MAIN = 0;
+	private static final int MODE_SNAP_SAVE = 1;
+	private static final int MODE_SNAP_LOAD = 2;
+	private static final int MODE_SNAP_EDIT = 3;
 
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
@@ -395,15 +406,9 @@ public class MicroActivity extends AppCompatActivity {
 
 	public void showExitConfirmation() {
 		AlertDialog.Builder alertBuilder = new AlertDialog.Builder(this);
-		alertBuilder.setTitle(R.string.CONFIRMATION_REQUIRED)
-				.setMessage(R.string.FORCE_CLOSE_CONFIRMATION)
+		alertBuilder.setTitle(R.string.exit_confirm)
 				.setPositiveButton(android.R.string.ok, (d, w) -> {
 					hideSoftInput();
-					MidletThread.destroyApp();
-				})
-				.setNeutralButton(R.string.action_settings, (d, w) -> {
-					hideSoftInput();
-					Config.startApp(this, appName, appPath, true);
 					MidletThread.destroyApp();
 				})
 				.setNegativeButton(android.R.string.cancel, null);
@@ -469,11 +474,26 @@ public class MicroActivity extends AppCompatActivity {
 					hideSystemUI();
 				}
 			}
+
+			@Override
+			public void onDrawerClosed(@NonNull View drawerView) {
+				if (drawerMode != MODE_MAIN) {
+					showMainDrawer();
+				}
+			}
 		});
 		PopupMenu popup = new PopupMenu(this, binding.displayableContainer);
 		Menu menu = popup.getMenu();
 		onCreateOptionsMenu(menu);
+		drawerMenu = menu;
 		fillDrawerItems(menu);
+	}
+
+	private void showMainDrawer() {
+		drawerMode = MODE_MAIN;
+		String title = current != null ? current.getTitle() : null;
+		binding.menuDrawerTitle.setText(title == null ? appName : title);
+		fillDrawerItems(drawerMenu);
 	}
 
 	private void fillDrawerItems(Menu menu) {
@@ -519,6 +539,13 @@ public class MicroActivity extends AppCompatActivity {
 		row.setClickable(true);
 		row.setFocusable(true);
 		row.setOnClickListener(v -> {
+			int id = item.getItemId();
+			if (id == R.id.action_snap_save || id == R.id.action_snap_load
+					|| id == R.id.action_snap_edit) {
+				// slot pages replace the drawer contents — keep it open
+				onOptionsItemSelected(item);
+				return;
+			}
 			drawerLayout.closeDrawers();
 			if (item.isCheckable()) {
 				item.setChecked(!item.isChecked());
@@ -526,6 +553,148 @@ public class MicroActivity extends AppCompatActivity {
 			onOptionsItemSelected(item);
 		});
 		drawerItems.addView(row);
+	}
+
+	private TextView addDrawerRow(CharSequence text, boolean enabled, Runnable action) {
+		TextView row = new TextView(this);
+		row.setText(text);
+		row.setTextAppearance(this, android.R.style.TextAppearance_Medium);
+		row.setBackgroundResource(android.R.drawable.list_selector_background);
+		int pad = (int) (getResources().getDisplayMetrics().density * 12);
+		row.setPadding(pad * 2, pad, pad, pad);
+		row.setClickable(enabled);
+		row.setFocusable(enabled);
+		row.setEnabled(enabled);
+		if (!enabled) {
+			row.setAlpha(0.38f);
+		}
+		if (action != null) {
+			row.setOnClickListener(v -> action.run());
+		}
+		drawerItems.addView(row);
+		return row;
+	}
+
+	private void showSlotDrawer(int mode) {
+		drawerMode = mode;
+		int titleRes = mode == MODE_SNAP_SAVE ? R.string.snap_save
+				: mode == MODE_SNAP_LOAD ? R.string.snap_load : R.string.snap_edit;
+		binding.menuDrawerTitle.setText(titleRes);
+		drawerItems.removeAllViews();
+		addDrawerRow(getString(R.string.snap_back), true, this::showMainDrawer);
+		SimpleDateFormat fmt = new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault());
+		for (SnapVm.SlotInfo si : SnapVm.listSlots()) {
+			String text = si.exists
+					? (si.name != null ? si.name
+							: getString(R.string.snap_auto_name, si.slot + 1,
+									fmt.format(new Date(si.time))))
+					: getString(R.string.snap_slot_empty);
+			boolean enabled = si.exists || mode == MODE_SNAP_SAVE;
+			final SnapVm.SlotInfo slot = si;
+			addDrawerRow(text, enabled, () -> onSlotClicked(mode, slot));
+		}
+	}
+
+	private void onSlotClicked(int mode, SnapVm.SlotInfo si) {
+		switch (mode) {
+		case MODE_SNAP_SAVE:
+			if (si.exists) {
+				new AlertDialog.Builder(this)
+						.setMessage(R.string.snap_overwrite)
+						.setPositiveButton(android.R.string.yes,
+								(d, w) -> doSlotSave(si.slot))
+						.setNegativeButton(android.R.string.no, null)
+						.show();
+			} else {
+				doSlotSave(si.slot);
+			}
+			break;
+		case MODE_SNAP_LOAD:
+			if (si.exists) {
+				doSlotLoad(si.slot);
+			}
+			break;
+		case MODE_SNAP_EDIT:
+			if (si.exists) {
+				View anchor = drawerItems.getChildAt(si.slot + 1); // +1 = back row
+				PopupMenu pm = new PopupMenu(this,
+						anchor == null ? drawerItems : anchor);
+				pm.getMenu().add(0, 1, 0, R.string.snap_rename);
+				pm.getMenu().add(0, 2, 0, R.string.snap_delete);
+				pm.setOnMenuItemClickListener(mi -> {
+					if (mi.getItemId() == 1) {
+						showSlotRenameDialog(si);
+					} else {
+						confirmSlotDelete(si);
+					}
+					return true;
+				});
+				pm.show();
+			}
+			break;
+		}
+	}
+
+	private void doSlotSave(int slot) {
+		try {
+			int n = SnapVm.nextSaveIndex();
+			String stamp = new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+					.format(new Date());
+			SnapVm.saveGame(slot, getString(R.string.snap_auto_name, n, stamp));
+			Toast.makeText(this, R.string.snap_saved, Toast.LENGTH_SHORT).show();
+		} catch (Throwable t) {
+			Log.e("SnapVm", "save failed", t);
+			Toast.makeText(this, getString(R.string.snap_failed) + ": " + t,
+					Toast.LENGTH_LONG).show();
+		}
+		showSlotDrawer(drawerMode); // refresh: new name + any freed overwrite state
+	}
+
+	private void doSlotLoad(int slot) {
+		try {
+			SnapVm.loadGame(slot);
+			Toast.makeText(this, R.string.snap_loaded, Toast.LENGTH_SHORT).show();
+		} catch (Throwable t) {
+			Log.e("SnapVm", "load failed", t);
+			Toast.makeText(this, getString(R.string.snap_failed) + ": " + t,
+					Toast.LENGTH_LONG).show();
+		}
+		drawerLayout.closeDrawers();
+	}
+
+	private void showSlotRenameDialog(SnapVm.SlotInfo si) {
+		TextInputLayout layout = DialogInputBinding.inflate(getLayoutInflater()).getRoot();
+		EditText et = layout.getEditText();
+		if (et != null) {
+			if (si.name != null) {
+				et.setText(si.name);
+				et.setSelection(si.name.length());
+			}
+		}
+		new AlertDialog.Builder(this)
+				.setTitle(R.string.snap_rename)
+				.setView(layout)
+				.setNegativeButton(android.R.string.cancel, null)
+				.setPositiveButton(android.R.string.ok, (d, w) -> {
+					String nn = et == null ? "" : et.getText().toString().trim();
+					if (!nn.isEmpty()) {
+						SnapVm.renameSlot(si.slot, nn);
+						showSlotDrawer(MODE_SNAP_EDIT);
+					}
+				})
+				.show();
+	}
+
+	private void confirmSlotDelete(SnapVm.SlotInfo si) {
+		new AlertDialog.Builder(this)
+				.setMessage(R.string.snap_delete_msg)
+				.setPositiveButton(android.R.string.yes, (d, w) -> {
+					SnapVm.deleteSlot(si.slot);
+					Toast.makeText(this, R.string.snap_deleted, Toast.LENGTH_SHORT).show();
+					showSlotDrawer(MODE_SNAP_EDIT);
+				})
+				.setNegativeButton(android.R.string.no, null)
+				.show();
 	}
 
 	@Override
@@ -572,6 +741,7 @@ public class MicroActivity extends AppCompatActivity {
 		if (!SnapVm.enabled()) {
 			menu.findItem(R.id.action_snap_save).setVisible(false);
 			menu.findItem(R.id.action_snap_load).setVisible(false);
+			menu.findItem(R.id.action_snap_edit).setVisible(false);
 		}
 		return true;
 	}
@@ -599,9 +769,11 @@ public class MicroActivity extends AppCompatActivity {
 		} else if (id == R.id.action_save_log) {
 			saveLog();
 		} else if (id == R.id.action_snap_save) {
-			snapSave();
+			showSlotDrawer(MODE_SNAP_SAVE);
 		} else if (id == R.id.action_snap_load) {
-			snapLoad();
+			showSlotDrawer(MODE_SNAP_LOAD);
+		} else if (id == R.id.action_snap_edit) {
+			showSlotDrawer(MODE_SNAP_EDIT);
 		} else if (id == R.id.action_lock_orientation) {
 			if (item.isChecked()) {
 				VirtualKeyboard vk = ContextHolder.getVk();
@@ -626,27 +798,7 @@ public class MicroActivity extends AppCompatActivity {
 		return true;
 	}
 
-	private void snapSave() {
-		try {
-			SnapVm.saveGame();
-			Toast.makeText(this, R.string.snap_saved, Toast.LENGTH_SHORT).show();
-		} catch (Throwable t) {
-			Log.e("SnapVm", "save failed", t);
-			Toast.makeText(this, getString(R.string.snap_failed) + ": " + t,
-					Toast.LENGTH_LONG).show();
-		}
-	}
 
-	private void snapLoad() {
-		try {
-			SnapVm.loadGame();
-			Toast.makeText(this, R.string.snap_loaded, Toast.LENGTH_SHORT).show();
-		} catch (Throwable t) {
-			Log.e("SnapVm", "load failed", t);
-			Toast.makeText(this, getString(R.string.snap_failed) + ": " + t,
-					Toast.LENGTH_LONG).show();
-		}
-	}
 
 	private void lockOrientation() {
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {

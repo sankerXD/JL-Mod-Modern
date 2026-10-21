@@ -36,6 +36,7 @@ public final class SnapVm {
 	private static final String ENABLE_FILE = "snapvm.on";
 	private static final String TRACE_FILE = "snapvm.trace";
 	private static final String TRACE_CALLS_FILE = "snapvm.tracecalls";
+	private static final String TRACE_ARGS_FILE = "snapvm.traceargs";
 	private static final String STATS_FILE = "snapvm.stats";
 	private static final String PROF_FILE = "snapvm.prof";
 	private static final String ERR_FILE = "snapvm.err";
@@ -90,6 +91,9 @@ public final class SnapVm {
 			File calls = new File(dir, TRACE_CALLS_FILE);
 			if (calls.exists())
 				org.snapvm.Interpreter.TRACE_CALLS = readRegex(calls);
+			File targs = new File(dir, TRACE_ARGS_FILE);
+			if (targs.exists())
+				org.snapvm.Interpreter.TRACE_ARGS = readRegex(targs);
 			s.vm.setCallStatsEnabled(new File(dir, STATS_FILE).exists());
 			File err = new File(dir, ERR_FILE);
 			if (err.exists()) {
@@ -114,10 +118,15 @@ public final class SnapVm {
 		s.vm.registerShadow(javax.microedition.lcdui.game.GameCanvas.class,
 				SnapGameCanvasShadow::new);
 		s.vm.registerShadow(TimerTask.class, SnapTimerTaskShadow::new);
+		// java.util.Timer's internals are unreachable on ART (empty
+		// getDeclaredFields) — substitute our own subclass so its task
+		// schedule params are recorded at schedule() time.
+		s.vm.addHostAlias("java/util/Timer", SnapTimer.class);
 		s.vm.registerParkedCall("javax/microedition/lcdui/Canvas.serviceRepaints()V",
 				(v, t, args, done) -> SnapVmBridge.serviceRepaints(v, t, args[0], done));
 		LcduiFastCalls.register(s.vm);
 		SnapHandles.registerAll(s.vm);
+		SnapM3gHandles.registerAll(s.vm);
 		SnapStateCodecs.registerAll(s.vm);
 		s.appDir = appDir;
 		VmObject guest = s.vm.newGuestObject(mainClass);
@@ -193,9 +202,14 @@ public final class SnapVm {
 			while (running) {
 				try {
 					long b0 = System.nanoTime();
+					long opsBefore = vm.totalOps;
 					vm.pump(profWas ? 4_000 : PUMP_BUDGET);
 					busy += System.nanoTime() - b0;
-					Thread.sleep(1);
+					// Only yield when the slice found nothing to run — a fixed
+					// sleep(1) here turns into a hard floor on tick rate for
+					// games whose load loop is one short burst per tick.
+					if (vm.totalOps == opsBefore)
+						Thread.sleep(1);
 					long now = System.currentTimeMillis();
 						if (now - lastLog >= 1000) {
 						boolean prof = profPath != null && new File(profPath).exists();
@@ -293,24 +307,114 @@ public final class SnapVm {
 		restoredCurrent = d;
 	}
 
-	private File saveFile() {
+	// ---------- save slots ----------
+
+	public static final int SLOT_COUNT = 20;
+
+	/** One snapshot slot: file on disk + display name from slots.json (null → legacy). */
+	public static final class SlotInfo {
+		public int slot;
+		public boolean exists;
+		public String name;
+		public long time;   // file lastModified
+	}
+
+	private File snapshotDir() {
 		String dir = Config.getEmulatorDir();
 		if (dir == null || appDir == null) {
 			return null;
 		}
 		// snapshots live in their own tree, not inside per-game configs:
 		// <emulator>/snapshots/<game>/snap<slot>.svm
-		return new File(dir + Config.MIDLET_SNAPSHOTS_DIR + appDir.getName(), "snap0.svm");
+		return new File(dir + Config.MIDLET_SNAPSHOTS_DIR + appDir.getName());
 	}
 
-	/** Freeze the guest machine and write the snapshot to the per-game snapshot dir. */
-	public static void saveGame() throws Exception {
+	private File saveFile(int slot) {
+		File d = snapshotDir();
+		return d == null ? null : new File(d, "snap" + slot + ".svm");
+	}
+
+	private File metaFile() {
+		File d = snapshotDir();
+		return d == null ? null : new File(d, "slots.json");
+	}
+
+	// slots.json: {"counter": N, "names": {"<slot>": "<display name>"}}
+	private org.json.JSONObject readMeta() {
+		try {
+			File f = metaFile();
+			if (f == null || !f.exists()) {
+				return new org.json.JSONObject();
+			}
+			byte[] b = new byte[(int) f.length()];
+			java.io.FileInputStream in = new java.io.FileInputStream(f);
+			try {
+				int off = 0;
+				while (off < b.length) {
+					int n = in.read(b, off, b.length - off);
+					if (n < 0) break;
+					off += n;
+				}
+			} finally {
+				in.close();
+			}
+			return new org.json.JSONObject(
+					new String(b, java.nio.charset.StandardCharsets.UTF_8));
+		} catch (Exception e) {
+			return new org.json.JSONObject();
+		}
+	}
+
+	private void writeMeta(org.json.JSONObject meta) {
+		File f = metaFile();
+		if (f == null) {
+			return;
+		}
+		try {
+			java.io.FileOutputStream out = new java.io.FileOutputStream(f);
+			try {
+				out.write(meta.toString().getBytes(
+						java.nio.charset.StandardCharsets.UTF_8));
+			} finally {
+				out.close();
+			}
+		} catch (Exception e) {
+			Log.w(TAG, "slot meta write failed", e);
+		}
+	}
+
+	/** All {@link #SLOT_COUNT} slots; {@code exists} tells which hold a save. */
+	public static java.util.List<SlotInfo> listSlots() {
+		java.util.List<SlotInfo> out = new java.util.ArrayList<>();
+		SnapVm s = instance;
+		org.json.JSONObject names =
+				s == null ? null : s.readMeta().optJSONObject("names");
+		for (int i = 0; i < SLOT_COUNT; i++) {
+			SlotInfo si = new SlotInfo();
+			si.slot = i;
+			File f = s == null ? null : s.saveFile(i);
+			si.exists = f != null && f.exists();
+			si.time = si.exists ? f.lastModified() : 0;
+			si.name = names == null ? null : names.optString(String.valueOf(i), null);
+			out.add(si);
+		}
+		return out;
+	}
+
+	/** 1-based number for the next auto name ("存档N-…"); bumps on each save. */
+	public static int nextSaveIndex() {
+		SnapVm s = instance;
+		return s == null ? 1 : s.readMeta().optInt("counter", 0) + 1;
+	}
+
+	/** Freeze the guest machine into slot {@code slot} and record its display name. */
+	public static void saveGame(int slot, String name) throws Exception {
 		SnapVm s = instance;
 		if (s == null) {
 			throw new IllegalStateException("SnapVM not running");
 		}
 		byte[] snap = s.vm.checkpoint();
-		File f = s.saveFile();
+		File f = s.saveFile(slot);
 		if (f == null) {
 			throw new IllegalStateException("no save dir");
 		}
@@ -324,7 +428,52 @@ public final class SnapVm {
 		} finally {
 			out.close();
 		}
+		org.json.JSONObject meta = s.readMeta();
+		meta.put("counter", meta.optInt("counter", 0) + 1);
+		org.json.JSONObject names = meta.optJSONObject("names");
+		if (names == null) {
+			names = new org.json.JSONObject();
+			meta.put("names", names);
+		}
+		names.put(String.valueOf(slot), name);
+		s.writeMeta(meta);
 		Log.i(TAG, "saved " + snap.length + " bytes to " + f);
+	}
+
+	public static void renameSlot(int slot, String name) {
+		SnapVm s = instance;
+		if (s == null || s.saveFile(slot) == null || !s.saveFile(slot).exists()) {
+			return;
+		}
+		org.json.JSONObject meta = s.readMeta();
+		org.json.JSONObject names = meta.optJSONObject("names");
+		try {
+			if (names == null) {
+				names = new org.json.JSONObject();
+				meta.put("names", names);
+			}
+			names.put(String.valueOf(slot), name);
+			s.writeMeta(meta);
+		} catch (org.json.JSONException e) {
+			Log.w(TAG, "rename failed", e);
+		}
+	}
+
+	public static void deleteSlot(int slot) {
+		SnapVm s = instance;
+		if (s == null) {
+			return;
+		}
+		File f = s.saveFile(slot);
+		if (f != null) {
+			f.delete();
+		}
+		org.json.JSONObject meta = s.readMeta();
+		org.json.JSONObject names = meta.optJSONObject("names");
+		if (names != null) {
+			names.remove(String.valueOf(slot));
+			s.writeMeta(meta);
+		}
 	}
 
 	/**
@@ -332,12 +481,12 @@ public final class SnapVm {
 	 * are rebound onto the live shell: the midlet goes back to MidletThread,
 	 * and the displayable that was current at save time is re-shown.
 	 */
-	public static void loadGame() throws Exception {
+	public static void loadGame(int slot) throws Exception {
 		SnapVm s = instance;
 		if (s == null) {
 			throw new IllegalStateException("SnapVM not running");
 		}
-		File f = s.saveFile();
+		File f = s.saveFile(slot);
 		if (f == null || !f.exists()) {
 			throw new IllegalStateException("no save file");
 		}

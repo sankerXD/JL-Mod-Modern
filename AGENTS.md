@@ -557,6 +557,12 @@ AGP 默认的 `proguard-android-optimize.txt` 带 `-assumenosideeffects`，只�
 关掉 `externalNativeBuild`，把原版 APK 里那 68 个 `.so` 放进 `app/src/main/jniLibs/`。
 → 仓库多 8.5MB，换"装个 JDK17 + SDK 就能编"。
 
+**11b. 必须用 JDK 17 跑 Gradle，别用系统默认 java**
+Homebrew 的 openjdk 会偷偷升级（现在是 26.0.2.1），内嵌 Kotlin DSL 解析不了新版
+本号 → `IllegalArgumentException: 26.0.2.1`，连配置阶段都过不去。
+→ 编译一律带 `JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home`；
+嫌麻烦就 `export JAVA_HOME=$(/usr/libexec/java_home -v 17)` 写进 shell rc。
+
 **12. 签名密钥绝对不能提交**
 `.gitignore` 原本只挡 `*.jks`，`jlmod.keystore` / `keystore.properties` 会被 commit 上去。
 → 已补 `*.keystore` 和 `keystore.properties`。密钥丢了，以后发的更新用户必须卸载重装。
@@ -878,6 +884,94 @@ vs MIDletEventQueue BLOCKED@Vm.runUntilDone）。诊断工具：
 机器上选不了线程，这是唯一能抓泵死锁现场的手段，留着别删。教训：
 host 回调桥接里"替事件队列做决定"前，先想清楚这个 green 线程此刻
 到底跑在谁的 slice 上——`hostThread()`（发起线程）≠ 执行线程。
+
+**45. 3D足球 读档看台破洞：`getIndices()` 返回的是展开三角形列表，不是构造入参（m3g 适配层）**
+现象：读档后 pitch 绿、观众席大面积回来了，但看台条带局部破洞/白块。
+排查绕了三圈：先怀疑 `sum(stripLengths)!=getIndexCount()` 是不变量违例——
+**错的**：native `getIndexCount()` = `Σ(len-2)*3`（展开三角形数），
+`getIndices()` 返回 join+展开后的三角形索引流，`{4}`→6、`{8}`→18 本来就合法。
+真因：`IndexBufferHandle` 把 `getIndices()` 的**展开列表**当 explicit 构造
+入参回放——explicit TSA 的原始顶点流在 native 里被 join（strip 间插退化
+链接）后不再暴露，展开流再按 strip 流读一遍等于换了整张拓扑图：
+`{0,1,2,1}` 当 strip 只出一个真三角形，quad 直接少半。
+修法（两处）：
+- `TriangleStripArray` explicit ctor 缓存 `this.indices = indices.clone()`
+  （和 stripLengths/firstIndex 同款套路——native 读不回的入参在 Java 侧留底），
+  `IndexBufferHandle.capture` 对 `implicit=false` 读这个字段，不再碰 getIndices。
+- `revive` 对**旧档**（存的仍是展开流）做 `unexpand` 逆推：展开里 strip i 的
+  第 j 个三元组 `e[b+3j]` 恒为 v_j，后两个按 joined 位置 `s_i+j` 奇偶决定是否交换，
+  `s_i += L_i + (L_i 奇 ? 3 : 2)`——Python 模拟 join→expand→unexpand
+  两万组随机输入零失败，数学上精确可逆。判别：`idx.length == Σstrips` 是新档
+  （原始流），否则是旧档展开流。
+排查链上的假线索（以后别重走）：byte[72] 矩阵尾部 `1.9e38`/`-2.2e13` 这类
+"垃圾 float"是 **Matrix 惰性分类结构**（elem[16] + mask + classified|complete
+位域）里 mask 声明为隐式值的槽位，渲染器按 mask 取 0/1/±1 不读 elem——
+`0x40230432` 就是合法 rot180 掩码；`_setIdentity` 只写 mask 不碰 elem，
+`m3gCopyMatrix` 会把栈残留拷进 byte[]，live 也一样、无害。
+最后的"白块+深蓝楔形"对照**原版官方截图确认是原生设计**（替补席棚 + 顶棚），
+不是 bug——怀疑渲染差异前先去 dedomil 找原版截图对一遍，别白追。
+排查结束后临时探针已全部清除（Graphics3D 的 LOG_RENDER/dumpVB/dumpIB/
+imgHash/tr 解码、Transform.logMtx、lcdui Graphics 的 drawImage 日志、
+SnapM3gHandles 的 SNAPCAP/SNAPREV/imgProbe、TimerHandle 的 Log.i + BFS
+反射回退、`SnapVm.guestStackTop()/guestThreadId()` 包装）——snapvm 侧的
+`Vm.guestStackTop()/guestThreadId()` 仍保留，下次排查需要时在 adapter 里
+重新包一层即可。M3G 诊断 marker `snapvm.m3g` 已从设备删除。
+清理后验证：`assembleEmulatorDebug`（JDK 17）编译通过，snapvm 73 测全绿；
+全部剩余改动均为功能性（快照缓存/codec/Timer 别名），无探针残留。
+
+**46. 白屏+有声+0MIPS = guest 事件链已死，不是渲染问题（3D迷你高尔夫）**
+现象：读档后画面白/黑屏但 BGM 还在放。遥测 `0.0 MIPS | 0 paints | sleeps 0`。
+host Player 是原生解码线程，guest 死透了它照放——**声音在 ≠ 游戏活着**。
+三个零（MIPS/paints/sleeps）才是 guest 停摆的铁证。
+假线索（这次都踩过，别重走）：
+- err.log 里的裸异常栈（如 `RecordStoreNotFoundException`）可能是 **guest
+  自己 catch 后调 `e.printStackTrace()`** 经 HostBridge 桥到 stderr——
+  看帧里有没有 `$ProxyN`/`callForSerial`/`EventQueue.run`，那只是日志不是逃逸。
+  真逃逸会有 `SnapVM uncaught` 前缀或 Event.run 的 Log.e。
+- `GuestDrop: ... on stale X` 是 epoch 守卫的正常丢弃（旧画布 hideNotify、
+  旧 TimerTask tick），不是病因。
+真因那次的形态：`callSerially` 循环由 host 事件 + `runUntilDone` 入口线程
+承载（都不进快照），restore 撞见睡/等/PARKED 的入口线程 → clear 孤儿化 →
+事件白消费 → 链断。修复见 snapvm `Vm.callForSerial`/`restoreOrphan`。
+**诊断工具**：`snapvm/tools/parse_snap.py`（线程表/活死状态）和
+`snap_stats.py`（ref-kind 体积分布）直接解析 .svm 文件。
+
+**47. 快照体积失控 = 线程尸体 + proxy 泄漏（不是游戏数据大）**
+`callSerially` 每事件造一个入口 `VmThread` 且死后不清 → 尸体 ~46B/个
+无限累积（高尔夫对局 12 分钟就 44025 个 ≈2MB）；`proxyFor` 每次
+`new Proxy` 塞 `vm.proxies` → 同速累积（~27B/个 ≈1.2MB）。两处都在
+`Vm.java`/`HostBridge.java`：`cullDeadThreads()`（保留 live/box-bound/
+join 引用，newThread 每 1024 个 + checkpoint 前扫）+ proxy 按
+(guest,iface) 缓存（`VmObject.proxies`）。现在下限 ~0.5MB = 真实游戏堆。
+**记住：`vm.threads` 是 append-only 的，别往里塞一次性对象；给 host
+持有了 guest 侧资源的映射都要考虑清理路径。**
+
+**48. 真机驱动设备的两套输入通道别混**
+- **KEYINJECT 广播**注入的是 **J2ME 键码**（-5/-6/-7/-1..-4），直进
+  CanvasEvent 队列——只对游戏有效，对抽屉/对话框/系统 UI 无效。
+- **抽屉/系统 UI** 用 `input keyevent 82`（MENU 开抽屉）和 `input tap x y`：
+  抽屉是系统窗口**不吃 overlay 拦截**（游戏区触摸才被拦）。DPAD/ENTER
+  对抽屉项不可靠（焦点不显示也不一定进去），直接 tap 坐标最稳。
+- 抽屉项坐标（960×720）：主菜单 即时存档≈(110,315)、读取即时存档≈(110,400)、
+  编辑即时存档≈(110,485)；槽位页 返回≈(110,140)、槽位0≈(110,230)、行距≈85px。
+
+**49. 多槽位即时存档（20 槽，slots.json 元数据）**
+- 存储：`<emulator>/snapshots/<游戏名>/snap<N>.svm`（N=0..19）+
+  `slots.json`（`{"counter":N,"names":{"<slot>":"<显示名>"}}`）。
+  `counter` **只增不减**——覆盖/删除/重启都不回退，是「存档x」里的 x。
+- API 在 `SnapVm.java`：`SLOT_COUNT`/`listSlots()`/`nextSaveIndex()`/
+  `saveGame(slot,name)`/`loadGame(slot)`/`renameSlot`/`deleteSlot`。
+  老快照没有 names 记录时按 `slot+1`+文件 mtime 合成显示名（纯显示，不写盘）。
+- UI 在 `MicroActivity`：`drawerMode`（MAIN/SAVE/LOAD/EDIT）+
+  `showSlotDrawer()` 把抽屉内容整页换成「返回 + 20 槽」，
+  `DrawerLayout.onDrawerClosed` 里自动回 MODE_MAIN（下次开抽屉是主菜单）。
+  编辑态点占用槽弹 PopupMenu（重命名/删除），重命名走 `DialogInputBinding`。
+- 自动名 `getString(R.string.snap_auto_name, counter+1, "MM-dd HH:mm")`
+  **在写入那一刻用当前 locale 生成后原样入库**——之后切语言不重算（符合需求）。
+  字符串在 values / zh-rCN / zh-rTW 三套，其它 locale 回落英文。
+- 实测（960×720）：空槽 `————————` 置灰（load/edit）/可点（save）；
+  占用槽 save 弹「是否覆盖当前存档？」；load 零确认直接读；
+  counter=2 时覆盖得「存档2」，删档后 counter 不回退，重启后新档得「存档3」。
 
 ### 想要回滚进度时的土办法
 
