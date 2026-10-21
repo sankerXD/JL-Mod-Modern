@@ -28,21 +28,28 @@ public final class SnapVmBridge {
 	 */
 	public static void serviceRepaints(Vm vm, VmThread t, Object guestCanvas, Runnable done) {
 		Canvas canvas = (Canvas) vm.toHost(guestCanvas, Canvas.class);
-		canvas.repaint();
 		EventQueue eq = Display.getEventQueue();
-		if (eq != null && eq.dispatchThread() == t.hostThread()) {
-			// This green thread's callFromHost originated on the event queue,
-			// which is still blocked inside that very call — a completion
-			// marker could never be consumed. Process the repaint inline
-			// instead (real serviceRepaints semantics). callbackLock is
-			// deliberately NOT taken: on the dispatch thread it's a reentrant
-			// no-op, but when this green thread happens to be executing a
-			// slice on the pump, acquiring it would deadlock against the
-			// queue parked in runUntilDone waiting on execLock.
+		if (eq == null || eq.dispatchThread() == t.hostThread() || vm.inExecLock()) {
+			// Two cases make the marker path unusable or pointless:
+			// 1. This green thread's callFromHost originated on the event
+			//    queue, which is still blocked inside that very call — a
+			//    completion marker could never be consumed.
+			// 2. The handler itself is running inside an execLock slice —
+			//    always true for parked calls — so an inline repaint is
+			//    legal: execLock is reentrant and the nested paint entry is
+			//    an independent VmThread. Posting a marker instead costs a
+			//    cross-thread round trip (~4-5ms on this device) per call,
+			//    which dominates loading-loop tick cost.
+			// armFullRepaint (not repaint()) avoids posting paintEvent — the
+			// dispatch thread must never run process() concurrently with our
+			// inline drain. The screen flush stays on the queue.
+			canvas.armFullRepaint();
 			canvas.processPendingRepaint();
 			done.run();
+			canvas.postFlushToScreen();
 			return;
 		}
+		canvas.repaint();
 		final long parkedAt = System.currentTimeMillis();
 		Display.postEvent(new SimpleEvent() {
 			@Override

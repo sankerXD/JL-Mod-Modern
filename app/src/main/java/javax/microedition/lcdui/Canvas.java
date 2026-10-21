@@ -62,6 +62,7 @@ import javax.microedition.lcdui.commands.AbstractSoftKeysBar;
 import javax.microedition.lcdui.event.CanvasEvent;
 import javax.microedition.lcdui.event.Event;
 import javax.microedition.lcdui.event.EventFilter;
+import javax.microedition.lcdui.event.SimpleEvent;
 import javax.microedition.lcdui.graphics.CanvasView;
 import javax.microedition.lcdui.graphics.CanvasWrapper;
 import javax.microedition.lcdui.graphics.GlesView;
@@ -126,6 +127,15 @@ public abstract class Canvas extends Displayable {
 
 	private final Object bufferLock = new Object();
 	private final Object surfaceLock = new Object();
+	// True while guest paint() is executing — on any thread. Replaces
+	// Thread.holdsLock(paintEvent): processPendingRepaint deliberately avoids
+	// the paintEvent monitor, and guest execution is serialized by execLock
+	// so a single flag is sufficient.
+	private volatile boolean inPaint;
+	// Dedicated graphics for the pump-thread repaint path — never touches the
+	// shared getSingleGraphics() canvas (see processPendingRepaint).
+	private Graphics inlineGraphics;
+	private Bitmap inlineBitmap;
 	private final PaintEvent paintEvent = new PaintEvent();
 	private final SoftBar softBar = new SoftBar();
 	private final CanvasWrapper canvasWrapper = new CanvasWrapper(settings.screenFilter);
@@ -618,7 +628,7 @@ public abstract class Canvas extends Displayable {
 			return;
 		}
 		synchronized (bufferLock) {
-			if (Thread.holdsLock(paintEvent)) {
+			if (inPaint) {
 				offscreen.getSingleGraphics().flush(image, x, y, width, height);
 				return;
 			}
@@ -649,12 +659,16 @@ public abstract class Canvas extends Displayable {
 
 	@SuppressLint("NewApi")
 	private boolean repaintScreen() {
-		Surface surface = this.surface;
-		if (surface == null || !surface.isValid()) {
-			return true;
-		}
 		try {
 			synchronized (surfaceLock) {
+				// Re-check under the lock: surfaceDestroyed clears the field
+				// under surfaceLock, and a stale local reference hands us a
+				// canvas bound to a released native surface (SIGSEGV in
+				// clipRect).
+				Surface surface = this.surface;
+				if (surface == null || !surface.isValid()) {
+					return true;
+				}
 				android.graphics.Canvas canvas = settings.graphicsMode == 3 ?
 						surface.lockHardwareCanvas() : surface.lockCanvas(null);
 				if (canvas == null) {
@@ -690,14 +704,94 @@ public abstract class Canvas extends Displayable {
 	}
 
 	/**
+	 * SnapVmBridge only: arm a full-canvas repaint without posting the event.
+	 * Used by the inline serviceRepaints path, which drains the clip itself —
+	 * posting paintEvent too would let the dispatch thread race this pipeline.
+	 */
+	final void armFullRepaint() {
+		limitFps();
+		if (width <= 0 || height <= 0)
+			return;
+		synchronized (paintEvent.clip) {
+			paintEvent.isPending = false;
+			paintEvent.clip.set(0, 0, width, height);
+		}
+	}
+
+	/**
 	 * SnapVmBridge only: process this canvas's pending repaint inline on the
-	 * calling thread, bypassing callbackLock. Used when the event queue is
-	 * already inside the call chain that triggered the repaint — a completion
-	 * marker could never be consumed, and taking callbackLock on another thread
-	 * would deadlock against the queue parked in runUntilDone.
+	 * calling thread, bypassing callbackLock AND the paintEvent monitor. The
+	 * event queue can pop the posted paintEvent and hold its monitor while
+	 * calling guest paint() — which needs execLock — so taking that monitor
+	 * here while execLock is held would deadlock (ABBA: execLock→paintEvent
+	 * vs paintEvent→execLock). Only leaf locks (clip, bufferLock) are taken;
+	 * the screen flush is deliberately left to the event queue — surface ops
+	 * must stay on the dispatch thread (see postFlushToScreen).
+	 */
+	/**
+	 * SnapVmBridge only: process this canvas's pending repaint inline on the
+	 * calling thread, bypassing callbackLock AND the paintEvent monitor. The
+	 * event queue can pop the posted paintEvent and hold its monitor while
+	 * calling guest paint() — which needs execLock — so taking that monitor
+	 * here while execLock is held would deadlock (ABBA: execLock→paintEvent
+	 * vs paintEvent→execLock). Only leaf locks (clip, bufferLock) are taken;
+	 * the screen flush is deliberately left to the event queue — surface ops
+	 * must stay on the dispatch thread (see postFlushToScreen).
+	 *
+	 * A dedicated Graphics is used because Image.getSingleGraphics() hands
+	 * out a shared native canvas — reset()/setBitmap() on it from two
+	 * threads at once corrupts the SkCanvas and segfaults libhwui.
 	 */
 	final void processPendingRepaint() {
-		paintEvent.process();
+		if (!visible || offscreen == null)
+			return;
+		int l, t, r, b;
+		synchronized (paintEvent.clip) {
+			paintEvent.isPending = false;
+			l = paintEvent.clip.left;
+			t = paintEvent.clip.top;
+			r = paintEvent.clip.right;
+			b = paintEvent.clip.bottom;
+			paintEvent.clip.setEmpty();
+		}
+		if (l >= r || t >= b) {
+			return;
+		}
+		synchronized (bufferLock) {
+			Bitmap bmp = offscreen.getBitmap();
+			if (inlineGraphics == null || inlineBitmap != bmp) {
+				inlineGraphics = offscreen.getGraphics();
+				inlineBitmap = bmp;
+			}
+		}
+		Graphics g = inlineGraphics;
+		g.reset(l, t, r, b);
+		try {
+			inPaint = true;
+			paint(g);
+		} catch (Throwable e) {
+			Log.e(TAG, "Error in paint()", e);
+		} finally {
+			inPaint = false;
+		}
+		synchronized (bufferLock) {
+			offscreen.copyTo(offscreenCopy);
+		}
+	}
+
+	/**
+	 * SnapVmBridge only: queue the actual surface blit on the event queue.
+	 * requestFlushToScreen() must not run on the pump thread — repaintScreen
+	 * races the SurfaceHolder teardown callbacks enough already on the
+	 * dispatch thread without adding a second caller into the mix.
+	 */
+	final void postFlushToScreen() {
+		Display.postEvent(new SimpleEvent() {
+			@Override
+			public void process() {
+				requestFlushToScreen();
+			}
+		});
 	}
 
 	@Override
@@ -917,9 +1011,12 @@ public abstract class Canvas extends Displayable {
 			Graphics g = offscreen.getSingleGraphics();
 			g.reset(l, t, r, b);
 			try {
+				inPaint = true;
 				paint(g);
 			} catch (Throwable e) {
 				Log.e(TAG, "Error in paint()", e);
+			} finally {
+				inPaint = false;
 			}
 			synchronized (bufferLock) {
 				offscreen.copyTo(offscreenCopy);
