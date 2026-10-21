@@ -1,11 +1,12 @@
 # AGENTS.md — 维护者工作笔记
 
-**已发布**：https://github.com/sankerXD/JL-Modern · v1.0.2 → **下一个版本 1.0（SnapVM 版）**
-- 分支 `modern` → 远端 `main`；上游基线 commit `724b90a0`（JL-Mod 0.87.1）
+**已发布**：https://github.com/sankerXD/JL-Modern/releases/tag/v1.0 · **v1.0（SnapVM 唯一引擎版，2026-10-21 CI 发布）**
+- 分支 `main`；上游基线 commit `724b90a0`（JL-Mod 0.87.1）
 - 版本：`versionName 1.0` / `versionCode 54`（**1.0 = SnapVM 唯一引擎版；code 必须 >53 才能覆盖升级**）
 - v1.1.0/v1.1.1（即时存档实验版）已回滚并从 Releases 删掉，见「六点五」
-- Release 附件：`JL-Modern_1.0.apk`（用 `jlmod.keystore` 签名，密钥不入库）
-- 重新发版：`git tag v1.0` → `git push modern main --tags` → **CI 自动发 Release**
+- Release 附件：`JL-Modern_1.0.apk`（Android debug.keystore 签名——每台机器/CI 同一把，覆盖升级不冲突；
+  注意 outputFileName 模板是 `JL-Modern_<versionName>.apk`，dirName 段已删，别加回去不然出 `1.0-.apk`）
+- 重新发版：改版本号 → `git tag vX.Y.Z` → `git push --tags` → **CI 自动发 Release**
   （tag `v*` 触发 `gh release create` 挂 release apk；签名要配 secrets
   `SIGNING_KEY`=keystore base64 + `KEYSTORE_PROPERTIES`）
 
@@ -26,7 +27,8 @@
 - `AppInstaller` 不再跑 dx——converted 目录只剩 `res.jar` + manifest + icon
 - `AppUtils.getApps` 的"已安装"判定改用 `res.jar`（原来查 converted.zip/dex，
   不改的话新装游戏目录会被当垃圾删）
-- `settings.gradle.kts` 去掉 `:dexlib`（dexlib/ 目录本地还留着没删，git 里已脱离 build）
+- `:dexlib` 模块已从 git 和 build 移除；它还装着的 `ru.woesss.util.TextUtils`/`zip.ZipFile` 挪进了
+  `app/src/main/java/ru/woesss/util/`，zip4j 2.11.5 由 app 直接声明
 - `ProfileModel` 默认绑定 `hd.ini` + `screenScaleType=1`（适应窗口）
 - CI：`.github/workflows/android.yml` 平级 checkout `JL-Modern` + `snapvm`
   （`includeBuild("../snapvm")` 是硬依赖），JDK17，`verifyBundledShaders` +
