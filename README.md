@@ -51,7 +51,7 @@ are in [AGENTS.md](AGENTS.md).
 
 ## 中文简介
 
-一个现代化的 J2ME 模拟器。核心不是 Java 转 dex 的老路子，而是全新开发的
+一个现代化的 J2ME 模拟器。核心不是陈旧的dex，而是全新开发的
 Java 解释器 [snapvm](https://github.com/sankerXD/snapvm) —— 可序列化 JVM，
 整机状态可冻结可恢复，所以能做到真·即时存档。
 
