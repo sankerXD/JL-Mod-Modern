@@ -19,7 +19,6 @@ package ru.woesss.j2me.installer;
 import android.net.Uri;
 import android.util.Log;
 
-import com.android.dx.command.dexer.Main;
 
 import net.lingala.zip4j.io.inputstream.ZipInputStream;
 import net.lingala.zip4j.model.FileHeader;
@@ -266,13 +265,8 @@ public class AppInstaller {
 				return;
 			}
 		}
-		try {
-			Main.main(new String[]{"--no-optimize",
-					"--output=" + tmpDir + Config.MIDLET_DEX_ARCH,
-					srcJar.getAbsolutePath()});
-		} catch (Throwable e) {
-			throw new ConverterException("Dexing error", e);
-		}
+		// jar is no longer dexed — SnapVM interprets it directly; the
+		// converted dir only carries res.jar + manifest + icon
 		if (manifest != null) {
 			manifest.merge(newDesc);
 			newDesc = manifest;

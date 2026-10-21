@@ -1,23 +1,36 @@
 # AGENTS.md — 维护者工作笔记
 
-**已发布**：https://github.com/sankerXD/JL-Modern · v1.0.2
+**已发布**：https://github.com/sankerXD/JL-Modern · v1.0.2 → **下一个版本 1.0（SnapVM 版）**
 - 分支 `modern` → 远端 `main`；上游基线 commit `724b90a0`（JL-Mod 0.87.1）
-- 版本：`versionName 1.0.2` / `versionCode 53`（**1.0.2 = 着色器内置进 APK，已发版**）
+- 版本：`versionName 1.0` / `versionCode 54`（**1.0 = SnapVM 唯一引擎版；code 必须 >53 才能覆盖升级**）
 - v1.1.0/v1.1.1（即时存档实验版）已回滚并从 Releases 删掉，见「六点五」
-- Release 附件：`JL-Modern_1.0.2.apk`（用 `jlmod.keystore` 签名，密钥不入库）
-- 重新发版：改版本号 → `./gradlew assembleEmulatorRelease` → `git tag/gpush` → `gh release create --repo sankerXD/JL-Modern`
+- Release 附件：`JL-Modern_1.0.apk`（用 `jlmod.keystore` 签名，密钥不入库）
+- 重新发版：`git tag v1.0` → `git push modern main --tags` → **CI 自动发 Release**
+  （tag `v*` 触发 `gh release create` 挂 release apk；签名要配 secrets
+  `SIGNING_KEY`=keystore base64 + `KEYSTORE_PROPERTIES`）
 
 ### 发布检查清单（每次发版照这个走，别跳步）
 
 1. `app/build.gradle.kts`：`versionCode` +1、`versionName` 改掉
 2. **确认安装包自带着色器还在**（从 1.0.2 起是硬要求，用户明确说过以后别丢）：
-   - `app/src/main/assets/bundled_shaders/` 里 5 个文件（hd.ini/hd.fsh/slotmask.ini/slotmask.fsh/slotmask.vsh）
+   - `app/src/main/assets/bundled_shaders/` 里 9 个文件（hd.ini/hd.fsh/slotmask.ini/slotmask.fsh/slotmask.vsh/lcd3x.ini/lcd3x.fsh/dither.ini/dither.fsh）
    - `FileUtils.initWorkDir()` 里还挂着 `BundledShaders.install(dir)` 那一行
 3. `./gradlew assembleEmulatorRelease && ./gradlew verifyBundledShaders`
    （后者会打开 APK 逐个检查 `assets/bundled_shaders/*`，少一个直接编译失败）
-4. 实机验一遍：`rm -rf /sdcard/JL-Mod/shaders` → 启动 App → 文件自动重建
-5. `git tag vX.Y.Z` → `git push modern main --tags`
-6. `gh release create vX.Y.Z --repo sankerXD/JL-Modern JL-Modern_X.Y.Z.apk --title ... --notes ...`
+4. 实机验一遍：`rm -rf /sdcard/JL-Modern/shaders` → 启动 App → 文件自动重建
+5. `git tag vX.Y.Z` → `git push --tags` → **CI（android.yml）自动建 Release 挂 apk**
+
+### v1.0 结构变化（dex 引擎已删）
+
+- `SnapVm.enabled()` 恒 true；`MicroLoader.loadMIDlet` FULL_EMULATOR 分支只剩 `SnapVm.load`
+- `AppInstaller` 不再跑 dx——converted 目录只剩 `res.jar` + manifest + icon
+- `AppUtils.getApps` 的"已安装"判定改用 `res.jar`（原来查 converted.zip/dex，
+  不改的话新装游戏目录会被当垃圾删）
+- `settings.gradle.kts` 去掉 `:dexlib`（dexlib/ 目录本地还留着没删，git 里已脱离 build）
+- `ProfileModel` 默认绑定 `hd.ini` + `screenScaleType=1`（适应窗口）
+- CI：`.github/workflows/android.yml` 平级 checkout `JL-Modern` + `snapvm`
+  （`includeBuild("../snapvm")` 是硬依赖），JDK17，`verifyBundledShaders` +
+  release + debug 全建
 
 > 这里记录本次改造的**全过程**：为什么这么改、踩过哪些坑、怎么回滚。
 > 面向维护者自己（也方便 AI 助手接手）。对外说明看 [README.md](JL-Mod-trigger/README.md)。
@@ -143,6 +156,18 @@ adb shell tar -xf sdcard-JL-Mod-backup.tar -C /sdcard   # 需要时
 |---|---|---|
 | **`hd.ini`（当前使用）** | **抗锯齿高清化**：手工双线性放大 + unsharp 锐化 | J2ME 手游、文字多的游戏 |
 | `slotmask.ini` | CRT slotmask（OSSC 移植） | 想要彩监味道时 |
+| `lcd3x.ini` | LCD 子像素网格：虚拟 LCD 格内 R/G/B sin 条纹 + 格间暗缝 | 掌机质感、像素游戏 |
+| `dither.ini` | 黑白抖动：Bayer 4x4 有序抖动量化到 N 级灰度，Levels=2 时是纯 1-bit | 诺基亚早期黑白屏质感 |
+
+- `lcd3x`/`dither` 共用 `slotmask.vsh` 做顶点着色器（走 MVP 直通，只传 texcoord）。
+- **两个都在屏幕空间做效果**（`gl_FragCoord` + `GL_OES_standard_derivatives` 求每屏幕像素
+  的 uv 增量）——最初按游戏 texel 绑图案，非整数缩放时每条纹只剩 1px 左右，满屏彩虹噪点。
+  改成"虚拟 LCD 格"后效果与缩放倍数无关：先把 uv 吸到格中心+最近 texel（即使采样器是
+  LINEAR 也取到纯 texel 色），再在格内画子像素条纹/抖动。
+- `lcd3x` 参数：Cell size（虚拟格宽 px，默认 3）、Grid gap（格间暗缝，默认 0.5）、
+  Brightness（默认 1.5）、Subpixel（条纹强度混合，默认 1.0 = 全强度，调低更柔）。
+- `dither` 参数：Levels（灰阶 2–8，默认 2 = 纯黑白）、Palette（0 灰阶 / 1 橄榄绿）、
+  Contrast（默认 1.1）、Pixel size（虚拟像素块 px，默认 1 = 细颗粒，调大更像低分辨率老屏）。
 
 ### 当前的 HD anti-alias（`hd.fsh`）
 
@@ -174,7 +199,7 @@ Mask brightness、Scanline、Threshold。
 
 以前换台机器要先 `adb push shaders/ /sdcard/JL-Mod/shaders/`，现在**装完就有**：
 
-- 文件放在 `app/src/main/assets/bundled_shaders/`（hd.ini/hd.fsh/slotmask.ini/slotmask.fsh/slotmask.vsh）
+- 文件放在 `app/src/main/assets/bundled_shaders/`（hd.ini/hd.fsh/slotmask.ini/slotmask.fsh/slotmask.vsh/lcd3x.ini/lcd3x.fsh/dither.ini/dither.fsh，清单同步在 `BundledShaders.FILES`）
 - 启动时由 `util/BundledShaders.install()` 释放到 `<工作目录>/shaders/`，
   挂钩点是 `FileUtils.initWorkDir()`（MainActivity 建目录、改工作目录、授权后重试都会走到，天然幂等）
 - **不会覆盖你改过的文件**：书签文件 `shaders/.bundled_shaders` 里记着 `version` + 每个文件的 md5；
@@ -262,10 +287,40 @@ Mask brightness、Scanline、Threshold。
 
 - 根布局换成 `androidx.drawerlayout.widget.DrawerLayout`（新增依赖 `androidx.drawerlayout:drawerlayout:1.2.0`），左侧 280dp 抽屉。
 - 抽屉内容**由同一份菜单资源** `res/menu/midlet_displayable.xml` 动态生成（`setupMenuDrawer()`），
-  「退出 / 存储日志 / 锁定屏幕旋转 / 键盘类型(IME) / 屏幕截图 / 限制 FPS / 虚拟键盘子菜单」全在，
+  顶层「退出 / 即时存档 / 读取即时存档 / 编辑即时存档」，往下两个子类别：
+  **显示设置**（锁定屏幕旋转 / 原生分辨率 / 缩放设置 / 着色器 / 屏幕截图 / 限制 FPS）、
+  存储日志，**虚拟键盘**（编辑按键布局 / 调整按键大小 / 布局切换 / 隐藏按键）。
+  子类别就是 `<item>` 里嵌 `<menu>`（`action_submenu_display` / `action_submenu_vk`），
+  `fillDrawerItems()` 遇到 `hasSubMenu()` 渲染成灰色小标题 + 缩进子项；
   点击走原来的 `onOptionsItemSelected()`，行为一致（含可勾选项状态切换）。
 - 打开方式：**屏幕左边缘向右滑**（DrawerLayout 原生手势），或按 **MENU / BACK 键**（`openOptionsMenu()` 已改为打开抽屉）。
 - 抽屉标题显示当前游戏名。
+
+> **VK 布局编辑（编辑按键布局 / 调整按键大小）现在是事务式的**：
+> - 进编辑 = `MicroActivity.beginVkLayoutEdit(mode)` → `vk.beginLayoutEdit(mode)`
+>   做内存快照（rect/snapOffset/snapOrigin/snapMode/visible/keyScales）→ 画面上方出现
+>   「完成 / 放弃」条（`vk_edit_bar`，在 `activity_micro.xml` 的 midletFrame 里）→
+>   `setGameFrozen(true)` 冻结游戏：**SnapVM 时走 `SnapVm.setFrozen` 停泵**（guest 代码全停，
+>   repaint 排队等解冻），dex 路径回落 `MidletThread.pauseApp/resumeApp`。
+> - 「完成」= `setLayoutEditMode(LAYOUT_EOF)` + `onLayoutChanged(TYPE_CUSTOM)` 落盘；
+>   「放弃」= `discardLayoutEdit()` 恢复快照不落盘。
+> - 编辑中点抽屉任意项 → `onOptionsItemSelected` 顶部拦截弹「需要保存键盘布局吗」
+>   （保存/放弃/取消，取消时把 checkable 的勾选翻回去）；旧的菜单项
+>   `action_layout_edit_finish`（保存键盘布局）已从菜单和 onPrepareOptionsMenu 里删掉。
+> - `onPause` 兜底：编辑中应用退后台 = 静默放弃 + 解冻。
+> - **右侧偏上「隐藏全部/显示全部」小按钮**（`vk_hide_all`，36dp，`top|end`+marginTop 64dp
+>   避开 B 键；样式仿虚拟键 —— 半透明浅灰底 `#40D0D0D0` + 白描边
+>   `drawable/vk_hide_all_bg.xml`；**键在时常驻跟随键盘**，全部隐藏后才 3 秒淡出、
+>   屏幕任意触摸经 `dispatchTouchEvent` → `flashHideAllButton()` 唤出，编辑键盘时不显示）：
+>   `toggleHideAllKeys()` 全隐↔全显切换 + `onLayoutChanged` 落盘；
+>   `updateHideAllButton()` 在隐藏按键对话框/布局切换/编辑结束时刷新文案。
+
+> 「键盘类型(IME)」项已移除，换成「着色器」（游戏内实时切换）：
+> `MicroActivity.showShaderDialog` 复用设置页同款 `PickFileResultContract`+`ShaderList.validate`，
+> 选中写 `params.shader` → `MicroLoader.reloadShader()`（null 时回落全局 pref）→
+> `ProfilesManager.saveConfig` 持久化 → `Canvas.applyShader()` 在 GL 线程上重建
+> `ShaderProgram`（`GLRenderer.applyShader`，queueEvent，含 uTextureUnit/vbo/
+> uPixelDelta/uSetting 重绑 + 删旧 program）。graphicsMode!=1 时只存配置并提示不生效。
 
 
 ### 4. 着色器（滤镜）：全局加载文件 + 单游戏覆盖

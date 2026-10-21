@@ -22,8 +22,8 @@ android {
         applicationId = "io.github.sankerxd.jlmodern"
         minSdk = rootProject.extra["minSdk"] as Int
         targetSdk = rootProject.extra["targetSdk"] as Int
-        versionCode = 53
-        versionName = "1.0.2"
+        versionCode = 54
+        versionName = "1.0"
         resValue("string", "app_name", rootProject.name)
         // 数据目录名与 app_name 解耦：release/debug 共用 /sdcard/JL-Modern
         resValue("string", "emulator_dir_name", "JL-Modern")
@@ -126,8 +126,8 @@ fun getMidletManifestProperties(): Attributes = Manifest().let { mf ->
 }
 
 dependencies {
-    implementation(project(":dexlib"))
     implementation("org.snapvm:snapvm:0.1.0")
+    implementation("net.lingala.zip4j:zip4j:2.11.5")
 
     val roomVersion = "2.6.1"
     annotationProcessor("androidx.room:room-compiler:$roomVersion")
@@ -189,7 +189,11 @@ tasks.register("verifyBundledShaders") {
             "assets/bundled_shaders/hd.fsh",
             "assets/bundled_shaders/slotmask.ini",
             "assets/bundled_shaders/slotmask.fsh",
-            "assets/bundled_shaders/slotmask.vsh"
+            "assets/bundled_shaders/slotmask.vsh",
+            "assets/bundled_shaders/lcd3x.ini",
+            "assets/bundled_shaders/lcd3x.fsh",
+            "assets/bundled_shaders/dither.ini",
+            "assets/bundled_shaders/dither.fsh"
         )
         ZipFile(apk).use { zip ->
             val missing = required.filter { zip.getEntry(it) == null }

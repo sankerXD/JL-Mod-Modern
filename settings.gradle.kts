@@ -16,5 +16,5 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "JL-Modern"
-include(":app", ":dexlib")
+include(":app")
 includeBuild("../snapvm")

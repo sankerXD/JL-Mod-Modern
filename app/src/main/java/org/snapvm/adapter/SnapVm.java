@@ -27,13 +27,13 @@ import ru.playsoftware.j2meloader.config.Config;
  * the dex pipeline, wires host shadows for guest-extends-host classes, and runs
  * a scheduler thread that services guest green threads.
  *
- * Enabled per device by creating the marker file "snapvm.on" in the emulator
- * data dir; absent the file the classic dex path runs unchanged.
+ * Since v1.0 SnapVM is the only engine — the dex path is gone and enabled()
+ * always returns true; the marker file no longer does anything.
  */
 public final class SnapVm {
 	private static final String TAG = "SnapVm";
 	private static final long PUMP_BUDGET = 200_000;
-	private static final String ENABLE_FILE = "snapvm.on";
+
 	private static final String TRACE_FILE = "snapvm.trace";
 	private static final String TRACE_CALLS_FILE = "snapvm.tracecalls";
 	private static final String TRACE_ARGS_FILE = "snapvm.traceargs";
@@ -58,8 +58,7 @@ public final class SnapVm {
 	}
 
 	public static boolean enabled() {
-		String dir = Config.getEmulatorDir();
-		return dir != null && new File(dir, ENABLE_FILE).exists();
+		return true;
 	}
 
 	private static String readRegex(File f) {
@@ -118,6 +117,21 @@ public final class SnapVm {
 		s.vm.registerShadow(javax.microedition.lcdui.game.GameCanvas.class,
 				SnapGameCanvasShadow::new);
 		s.vm.registerShadow(TimerTask.class, SnapTimerTaskShadow::new);
+		// Other host classes games subclass — missing a factory kills the guest
+		// thread on marshal (requireShadow). Library scan: Sprite x44, Form x31,
+		// TextBox x4, Alert x2, List x1, TiledLayer x0 (sibling of Sprite).
+		s.vm.registerShadow(javax.microedition.lcdui.TextBox.class,
+				SnapTextBoxShadow::new);
+		s.vm.registerShadow(javax.microedition.lcdui.Form.class,
+				SnapFormShadow::new);
+		s.vm.registerShadow(javax.microedition.lcdui.List.class,
+				SnapListShadow::new);
+		s.vm.registerShadow(javax.microedition.lcdui.Alert.class,
+				SnapAlertShadow::new);
+		s.vm.registerShadow(javax.microedition.lcdui.game.Sprite.class,
+				SnapSpriteShadow::create);
+		s.vm.registerShadow(javax.microedition.lcdui.game.TiledLayer.class,
+				SnapTiledLayerShadow::new);
 		// java.util.Timer's internals are unreachable on ART (empty
 		// getDeclaredFields) — substitute our own subclass so its task
 		// schedule params are recorded at schedule() time.
@@ -201,6 +215,12 @@ public final class SnapVm {
 			boolean profWas = false;
 			while (running) {
 				try {
+					if (frozen) {
+						// VK layout edit freezes the VM wholesale — no guest code
+						// runs, pending repaints just queue up until thaw.
+						Thread.sleep(10);
+						continue;
+					}
 					long b0 = System.nanoTime();
 					long opsBefore = vm.totalOps;
 					vm.pump(profWas ? 4_000 : PUMP_BUDGET);
@@ -290,6 +310,16 @@ public final class SnapVm {
 		if (sampler != null) {
 			sampler.stop();
 			sampler = null;
+		}
+	}
+
+	/** Freeze/thaw all guest execution (VK layout edit etc.). */
+	private volatile boolean frozen;
+
+	public static void setFrozen(boolean freeze) {
+		SnapVm s = instance;
+		if (s != null) {
+			s.frozen = freeze;
 		}
 	}
 

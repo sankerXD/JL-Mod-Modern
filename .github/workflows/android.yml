@@ -1,23 +1,39 @@
 name: Android CI
 
+# snapvm is a composite build (includeBuild "../snapvm"), so both repos are
+# checked out side by side under the workspace:
+#   <workspace>/JL-Modern   (this repo)
+#   <workspace>/snapvm      (github.com/sankerXD/snapvm)
+
 on:
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
   push:
     branches:
-      - master
+      - main
+      - modern
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4.1.6
+      - uses: actions/checkout@v4
         with:
-          submodules: 'true'
+          path: JL-Modern
+
+      - name: Checkout snapvm (sibling of the app repo)
+        uses: actions/checkout@v4
+        with:
+          repository: sankerXD/snapvm
+          path: snapvm
+
       - name: set up JDK 17
-        uses: actions/setup-java@v4.2.1
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
@@ -27,49 +43,40 @@ jobs:
         env:
           ENCODED_KEYSTORE: ${{ secrets.SIGNING_KEY }}
           ENCODED_PROPS: ${{ secrets.KEYSTORE_PROPERTIES }}
+        working-directory: JL-Modern
         run: |
-          if [ "$ENCODED_PROPS" == "" ]; then
-            exit
+          if [ -z "$ENCODED_PROPS" ]; then
+            echo "no signing secrets — release apk will be unsigned"
+            exit 0
           fi
-          echo $ENCODED_KEYSTORE | base64 -di > keystore.jks
-          echo $ENCODED_PROPS | base64 -di > keystore.properties
+          echo "$ENCODED_PROPS" | base64 -di > keystore.properties
+          # storeFile is a local absolute path (e.g. ~/.android/debug.keystore)
+          # — repoint it at the decoded file
+          echo "$ENCODED_KEYSTORE" | base64 -di > ci.keystore
+          sed -i 's|^storeFile=.*|storeFile=ci.keystore|' keystore.properties
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-      - name: Build with Gradle
-        run: ./gradlew assembleEmulatorRelease
-
-      - name: Prepare artifact
+      - name: Build release + debug
+        working-directory: JL-Modern
         run: |
-          mkdir -p artifact/mapping
-          mv app/build/outputs/native-debug-symbols/**/* artifact
-          mv app/build/outputs/mapping/**/* artifact/mapping
-          (cd artifact && zip -r "$OLDPWD/symbols.zip" .)
+          chmod +x gradlew
+          ./gradlew verifyBundledShaders assembleEmulatorRelease assembleEmulatorDebug
 
-      - name: Get version
-        id: get_version
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: jlmodern-apks
+          path: |
+            JL-Modern/app/build/outputs/apk/emulator/release/*.apk
+            JL-Modern/app/build/outputs/apk/emulator/debug/*.apk
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: JL-Modern
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
         run: |
-          msg=$(git log -1 --pretty=format:"%s")
-          echo "version=${msg#* }" >> $GITHUB_OUTPUT
-
-      - name: Draft GitHub Release
-        uses: "marvinpinto/action-automatic-releases@v1.2.1"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: ${{ steps.get_version.outputs.version }}
-          draft: true
-          files: |
-            app/build/outputs/apk/**/*.apk
-            symbols.zip
-
-      - name: Upload Artifact (bin)
-        uses: actions/upload-artifact@v4.3.3
-        with:
-          name: "JL-Mod_${{ steps.get_version.outputs.version }}"
-          path: app/build/outputs/apk/emulator/release/*.apk
-
-      - name: Upload a Build Artifact (sym)
-        uses: actions/upload-artifact@v4.3.3
-        with:
-          name: "Symbols"
-          path: artifact
+          gh release create "$TAG" \
+            --title "JL-Modern $TAG" \
+            --generate-notes \
+            app/build/outputs/apk/emulator/release/*.apk

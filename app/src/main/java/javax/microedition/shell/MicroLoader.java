@@ -17,8 +17,6 @@
 
 package javax.microedition.shell;
 
-import static android.os.Build.VERSION.SDK_INT;
-import static android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -29,7 +27,6 @@ import android.util.Log;
 import android.util.SparseIntArray;
 import android.view.KeyEvent;
 
-import androidx.core.content.ContextCompat;
 import androidx.preference.PreferenceManager;
 
 import org.acra.ACRA;
@@ -67,8 +64,6 @@ import javax.microedition.util.ContextHolder;
 import io.reactivex.SingleObserver;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.schedulers.Schedulers;
-import kotlin.io.ConstantsKt;
-import kotlin.io.FilesKt;
 import ru.playsoftware.j2meloader.BuildConfig;
 import ru.playsoftware.j2meloader.config.Config;
 import ru.playsoftware.j2meloader.config.ProfileModel;
@@ -181,43 +176,15 @@ public class MicroLoader {
 	MIDlet loadMIDlet(String mainClass) throws ClassNotFoundException, InstantiationException,
 			IllegalAccessException, NoSuchMethodException, InvocationTargetException, IOException {
 		if (BuildConfig.FULL_EMULATOR) {
-			if (SnapVm.enabled()) {
-				Log.i(TAG, "loadMIDlet via SnapVM: " + mainClass);
-				try {
-					return SnapVm.load(appDir, mainClass);
-				} catch (IOException | RuntimeException e) {
-					throw e;
-				} catch (Exception e) {
-					throw new RuntimeException("SnapVM load failed", e);
-				}
+			// dex pipeline removed — SnapVM interprets the jar directly
+			Log.i(TAG, "loadMIDlet via SnapVM: " + mainClass);
+			try {
+				return SnapVm.load(appDir, mainClass);
+			} catch (IOException | RuntimeException e) {
+				throw e;
+			} catch (Exception e) {
+				throw new RuntimeException("SnapVM load failed", e);
 			}
-			File dexSource = new File(appDir, Config.MIDLET_DEX_ARCH);
-			if (!dexSource.exists()) {
-				dexSource = new File(appDir, Config.MIDLET_DEX_FILE);
-			}
-			File codeCacheDir = ContextCompat.getCodeCacheDir(context);
-			File dexOptDir = new File(codeCacheDir, Config.DEX_OPT_CACHE_DIR);
-			if (dexOptDir.exists()) {
-				FileUtils.clearDirectory(dexOptDir);
-			} else if (!dexOptDir.mkdir()) {
-				throw new IOException("Can't create directory: [" + dexOptDir + ']');
-			}
-			if (SDK_INT >= UPSIDE_DOWN_CAKE) {
-				File dexCache = new File(dexOptDir, appDirName);
-				FilesKt.copyTo(dexSource, dexCache, true, ConstantsKt.DEFAULT_BUFFER_SIZE);
-				if (!dexCache.setReadOnly()) {
-					throw new IOException("Can't set readOnly flag for dex cache file");
-				}
-				dexSource = dexCache;
-			}
-			ClassLoader loader = new AppClassLoader(dexSource.getAbsolutePath(),
-					dexOptDir.getAbsolutePath(), context.getClassLoader(), appDir);
-			Log.i(TAG, "loadMIDletList main: " + mainClass + " from dex:" + dexSource.getPath());
-			//noinspection unchecked
-			Class<MIDlet> clazz = (Class<MIDlet>) loader.loadClass(mainClass);
-			Constructor<MIDlet> init = clazz.getDeclaredConstructor();
-			init.setAccessible(true);
-			return init.newInstance();
 		} else {
 			AppClassLoader.setDataDir(appDir);
 			//noinspection unchecked
@@ -272,6 +239,24 @@ public class MicroLoader {
 			return;
 		}
 		params.shader = ShaderList.loadIni(file);
+	}
+
+	/**
+	 * Re-resolve {@code params.shader} after it changed in-game (the drawer
+	 * shader picker): a null per-game shader falls back to the global
+	 * preference, exactly like launch-time {@link #applyShader()}, plus the
+	 * legacy empty-dir fixup from applyConfiguration.
+	 */
+	void reloadShader() {
+		applyShader();
+		ShaderInfo shader = params.shader;
+		if (shader != null && (shader.dir == null || shader.dir.isEmpty())) {
+			shader.dir = workDir + Config.SHADERS_DIR;
+		}
+	}
+
+	String getShadersDir() {
+		return workDir + Config.SHADERS_DIR;
 	}
 
 	/**

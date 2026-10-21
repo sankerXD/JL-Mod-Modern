@@ -64,13 +64,12 @@ public class AppUtils {
 				}
 				continue;
 			}
-			File compressed = new File(appFolder, Config.MIDLET_DEX_ARCH);
-			if (!compressed.isFile()) {
-				File dex = new File(appFolder, Config.MIDLET_DEX_FILE);
-				if (!dex.isFile()) {
-					FileUtils.deleteDirectory(appFolder);
-					continue;
-				}
+			// games are jars interpreted by SnapVM — res.jar marks a
+			// complete install (dex conversion is gone)
+			File resJar = new File(appFolder, Config.MIDLET_RES_FILE);
+			if (!resJar.isFile()) {
+				FileUtils.deleteDirectory(appFolder);
+				continue;
 			}
 			try {
 				AppItem item = getApp(appFolder);

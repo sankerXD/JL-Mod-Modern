@@ -206,5 +206,11 @@ public class ProfileModel {
 		vkFgColorSelected = 0xFFFFFF;
 		vkOutlineColor = 0xFFFFFF;
 		systemProperties = ContextHolder.getAssetAsString("defaults/system.props");
+		// every new game starts on the bundled HD shader — hd.ini is
+		// unpacked into the shaders dir on first launch
+		String emuDir = Config.getEmulatorDir();
+		if (emuDir != null) {
+			shader = ShaderList.loadIni(new File(emuDir + Config.SHADERS_DIR, "hd.ini"));
+		}
 	}
 }
