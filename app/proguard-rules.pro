@@ -35,6 +35,16 @@
 
 # emulator
 -keep public class org.microemu.** { public protected *; }
+
+# SnapVM 即时存档：捕获/恢复宿主对象靠私有字段名反射（Graphics.clip/image/
+# translate*, RecordStoreImpl.recordStoreName, Player impls 的 listeners/level 等，
+# ReflectHandle 还存 "类名|字段名" 串再 Class.forName）。release 混淆改名后
+# 反射直接 NoSuchFieldException（debug 不混淆所以只在 release 炸）。
+# 全成员 keep 也顺带冻结名字，保证快照文件跨版本兼容。
+-keep class javax.microedition.** { *; }
+-keep class ru.woesss.j2me.** { *; }
+-keep class org.snapvm.** { *; }
+-keep class mmpp.media.** { *; }
 # Keep the BuildConfig
 -keep class ru.playsoftware.j2meloader.BuildConfig { *; }
 -keep class ru.playsoftware.j2meloader.util.SparseIntArrayAdapter { *; }
