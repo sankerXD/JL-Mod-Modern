@@ -1,8 +1,14 @@
 # AGENTS.md — 维护者工作笔记
 
-**已发布**：https://github.com/sankerXD/JL-Modern/releases/tag/v1.0 · **v1.0（SnapVM 唯一引擎版，2026-10-21 CI 发布）**
+**已发布**：https://github.com/sankerXD/JL-Modern/releases/tag/v1.0.3 · **v1.0.3（SnapVM 唯一引擎版）**
 - 分支 `main`；上游基线 commit `724b90a0`（JL-Mod 0.87.1）
-- 版本：`versionName 1.0` / `versionCode 54`（**1.0 = SnapVM 唯一引擎版；code 必须 >53 才能覆盖升级**）
+- 版本：`versionName 1.0.3` / `versionCode 55`
+  - v1.0（code 54）即时存档在 release 上是坏的（见下），仍挂在 Releases 里
+  - **v1.0.1/v1.0.2 tag 名被上游 JL-Mod 占着**，我们的 hotfix 只能叫 v1.0.3
+  - ⚠️ **release 开 R8 混淆**（`isMinifyEnabled`）——即时存档靠私有字段名反射
+    （Graphics.clip、RecordStoreImpl.recordStoreName、ReflectHandle "类名|字段名"），
+    proguard-rules.pro 里的 `javax.microedition.**`/`ru.woesss.j2me.**`/`org.snapvm.**`/`mmpp.media.**`
+    全成员 keep 是硬性要求，删了存档必炸（debug 不混淆测不出来）
 - v1.1.0/v1.1.1（即时存档实验版）已回滚并从 Releases 删掉，见「六点五」
 - Release 附件：`JL-Modern_1.0.apk`（Android debug.keystore 签名——每台机器/CI 同一把，覆盖升级不冲突；
   注意 outputFileName 模板是 `JL-Modern_<versionName>.apk`，dirName 段已删，别加回去不然出 `1.0-.apk`）
