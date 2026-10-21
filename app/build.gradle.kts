@@ -23,7 +23,7 @@ android {
         minSdk = rootProject.extra["minSdk"] as Int
         targetSdk = rootProject.extra["targetSdk"] as Int
         versionCode = 55
-        versionName = "1.0.1"
+        versionName = "1.0.3"
         resValue("string", "app_name", rootProject.name)
         // 数据目录名与 app_name 解耦：release/debug 共用 /sdcard/JL-Modern
         resValue("string", "emulator_dir_name", "JL-Modern")
