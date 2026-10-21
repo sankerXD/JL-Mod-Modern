@@ -843,6 +843,19 @@ entry 调用提前返回 = 调用方拿到半成品状态。排查套路：`snap
 游戏自吞 IOException 返回 null，原版 JL-Mod 同样打
 `createImage is failed`——良性 ROM 缺陷，不是白屏原因。
 
+**43. 游戏莫名 4fps + 按键假死：先查 snapvm.tracecalls marker 有没有删**
+现象：傲剑江湖修完白屏后只剩 ~4fps，按键几乎无响应。VmSampler 一击定位：
+pump 线程 ~90% 时间在 `MatcherNative.matchesImpl/setInputImpl/
+PatternNative.openMatcherImpl`——**上一轮排查开的 `snapvm.tracecalls`
+忘了删**，每个 guest invoke 都拼两次字符串 + 分配 Matcher + 跑正则，
+interp 只剩 8% CPU，CanvasEvent 按键投递在 execLock 上饿死。修法
+（snapvm `e50bab3`）：`ClassFile.Ref.traceCallMatch` 把 regex 匹配结果
+缓存到方法引用上（regex 启动时固定），非匹配调用只付一个字节检查——
+现在开 `.*` 全匹配也 ~20fps。教训：**marker 是持久文件，用完必须删**；
+`snapvm.prof`/`snapvm.sample`/`snapvm.stats` 是 poll 动态生效，
+`snapvm.trace`/`snapvm.tracecalls` 只在 SnapVm.load 读一次，删了要重启
+App 才生效。排查假死先 `ls /sdcard/JL-Modern/ | grep snapvm` 看开了什么。
+
 ### 想要回滚进度时的土办法
 
 功能上做不了，但手动能做：把 `/sdcard/JL-Mod/data/<游戏名>/` 整个文件夹拷走就是一份完整存档，
