@@ -856,6 +856,29 @@ interp 只剩 8% CPU，CanvasEvent 按键投递在 execLock 上饿死。修法
 `snapvm.trace`/`snapvm.tracecalls` 只在 SnapVm.load 读一次，删了要重启
 App 才生效。排查假死先 `ls /sdcard/JL-Modern/ | grep snapvm` 看开了什么。
 
+**44. GameCanvas「repaint+serviceRepaints 内绘制」语义：EQ 发起的 parked
+serviceRepaints 必须就地处理 paintEvent，且不能碰 callbackLock**
+现象：3D迷你高尔夫（`aq extends GameCanvas`）白屏——SurfaceView 挂上了、
+guest `run()` repost 循环活着、`paint()` 在被调，但屏全白，`sr 0`、
+`0 paints` 全在说谎（`paintProbe` 只在 `SnapCanvasShadow.paint`，
+GameCanvas 走 `SnapGameCanvasShadow.paint` 没埋点——统计盲区，别信）。
+根因：游戏的 `aq.l()` = `o=true → repaint() → serviceRepaints() →
+o=false`，`aq.paint()` 开头 `ifeq 355` **只在 o 窗口内真正绘制**
+（J2ME 经典套路，依赖 serviceRepaints 同步语义）。旧 bridge 在
+EQ 线程上 early-`done.run()` 立即放行 → `o` 翻回 false 后 PaintEvent
+才被处理 → 每帧画空 offscreen。修法（`SnapVmBridge.serviceRepaints` +
+`Canvas.processPendingRepaint()`）：EQ 发起的调用**就地
+`paintEvent.process()`**，不走 callbackLock——dispatch 线程上它是可重入
+no-op，但该 green 线程的 slice 也可能跑在 pump 上：此时持 execLock 再拿
+callbackLock 会与「EQ 持 callbackLock 在 runUntilDone 等 execLock」
+循环等待（stackdump 实锤过这个死锁：SnapVm-Pump BLOCKED@SnapVm.java
+vs MIDletEventQueue BLOCKED@Vm.runUntilDone）。诊断工具：
+`snapvm.stackdump` marker——SnapVm 独立守护线程轮询，触发就
+`Thread.getAllStackTraces()` 写 err.log；**泵死了它也活**，jdb 在这台
+机器上选不了线程，这是唯一能抓泵死锁现场的手段，留着别删。教训：
+host 回调桥接里"替事件队列做决定"前，先想清楚这个 green 线程此刻
+到底跑在谁的 slice 上——`hostThread()`（发起线程）≠ 执行线程。
+
 ### 想要回滚进度时的土办法
 
 功能上做不了，但手动能做：把 `/sdcard/JL-Mod/data/<游戏名>/` 整个文件夹拷走就是一份完整存档，

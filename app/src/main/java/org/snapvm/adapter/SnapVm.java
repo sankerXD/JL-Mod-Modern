@@ -40,6 +40,7 @@ public final class SnapVm {
 	private static final String PROF_FILE = "snapvm.prof";
 	private static final String ERR_FILE = "snapvm.err";
 	private static final String SAMPLE_FILE = "snapvm.sample";
+	private static final String STACKDUMP_FILE = "snapvm.stackdump";
 
 	private static volatile SnapVm instance;
 
@@ -153,6 +154,35 @@ public final class SnapVm {
 
 	private void start() {
 		running = true;
+		// independent diagnostic thread: polls the stackdump marker and dumps
+		// every Java stack to err.log — must NOT live on the pump loop (if the
+		// pump is stuck, this is exactly when we need the dump).
+		Thread sd = new Thread(() -> {
+			String emuDir = Config.getEmulatorDir();
+			if (emuDir == null)
+				return;
+			File marker = new File(emuDir, STACKDUMP_FILE);
+			while (running) {
+				try {
+					Thread.sleep(500);
+					if (!marker.exists())
+						continue;
+					marker.delete();
+					StringBuilder sb = new StringBuilder("=== stackdump ===\n");
+					for (java.util.Map.Entry<Thread, StackTraceElement[]> e : Thread.getAllStackTraces().entrySet()) {
+						Thread t = e.getKey();
+						sb.append('"').append(t.getName()).append("' ").append(t.getState()).append('\n');
+						for (StackTraceElement el : e.getValue())
+							sb.append("    at ").append(el).append('\n');
+					}
+					System.err.println(sb);
+					Log.i(TAG, "stackdump written");
+				} catch (Throwable ignored) {
+				}
+			}
+		}, "SnapVm-StackDump");
+		sd.setDaemon(true);
+		sd.start();
 		pumpThread = new Thread(() -> {
 			long lastOps = 0, lastLog = System.currentTimeMillis();
 			long busy = 0;

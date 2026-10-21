@@ -31,8 +31,15 @@ public final class SnapVmBridge {
 		canvas.repaint();
 		EventQueue eq = Display.getEventQueue();
 		if (eq != null && eq.dispatchThread() == t.hostThread()) {
-			// invoked inside an event-queue callback: the queue is busy with
-			// this very event, so a completion marker could never be consumed
+			// This green thread's callFromHost originated on the event queue,
+			// which is still blocked inside that very call — a completion
+			// marker could never be consumed. Process the repaint inline
+			// instead (real serviceRepaints semantics). callbackLock is
+			// deliberately NOT taken: on the dispatch thread it's a reentrant
+			// no-op, but when this green thread happens to be executing a
+			// slice on the pump, acquiring it would deadlock against the
+			// queue parked in runUntilDone waiting on execLock.
+			canvas.processPendingRepaint();
 			done.run();
 			return;
 		}

@@ -689,6 +689,17 @@ public abstract class Canvas extends Displayable {
 		Display.getEventQueue().serviceRepaints(paintEvent);
 	}
 
+	/**
+	 * SnapVmBridge only: process this canvas's pending repaint inline on the
+	 * calling thread, bypassing callbackLock. Used when the event queue is
+	 * already inside the call chain that triggered the repaint — a completion
+	 * marker could never be consumed, and taking callbackLock on another thread
+	 * would deadlock against the queue parked in runUntilDone.
+	 */
+	final void processPendingRepaint() {
+		paintEvent.process();
+	}
+
 	@Override
 	public boolean isShown() {
 		return visible || super.isShown();
