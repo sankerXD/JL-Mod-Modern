@@ -112,7 +112,7 @@ android {
         }
         outputs.configureEach {
             if (this is com.android.build.gradle.internal.api.BaseVariantOutputImpl) {
-                outputFileName = "${rootProject.name}_$versionName-$dirName.apk"
+                outputFileName = "${rootProject.name}_$versionName.apk"
             }
         }
     }
