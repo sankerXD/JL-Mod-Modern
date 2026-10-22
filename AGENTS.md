@@ -1,8 +1,11 @@
 # AGENTS.md — 维护者工作笔记
 
-**已发布**：https://github.com/sankerXD/JL-Modern/releases/tag/v1.0.3 · **v1.0.3（SnapVM 唯一引擎版）**
+**已发布**：https://github.com/sankerXD/JL-Modern/releases/tag/v1.0.4 · **v1.0.4（SnapVM 唯一引擎版）**
 - 分支 `main`；上游基线 commit `724b90a0`（JL-Mod 0.87.1）
-- 版本：`versionName 1.0.3` / `versionCode 55`
+- 版本：`versionName 1.0.4` / `versionCode 56`
+  - v1.0.4（code 56）：时空旅者卡死修复（inPaint 序列化闸）+ 读档 BGM 修复
+    （PlayerHandle 存媒体字节）+ 捐赠移除 + 游戏内按键映射 + acra auto-service
+    排除（APK 缩到 10.5MB）
   - v1.0（code 54）即时存档在 release 上是坏的（见下），仍挂在 Releases 里
   - **v1.0.1/v1.0.2 tag 名被上游 JL-Mod 占着**，我们的 hotfix 只能叫 v1.0.3
   - ⚠️ **release 开 R8 混淆**（`isMinifyEnabled`）——即时存档靠私有字段名反射
