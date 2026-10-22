@@ -1,8 +1,10 @@
 # AGENTS.md — 维护者工作笔记
 
-**已发布**：https://github.com/sankerXD/JL-Modern/releases/tag/v1.0.4 · **v1.0.4（SnapVM 唯一引擎版）**
+**已发布**：https://github.com/sankerXD/JL-Modern/releases/tag/v1.0.5 · **v1.0.5（SnapVM 唯一引擎版）**
 - 分支 `main`；上游基线 commit `724b90a0`（JL-Mod 0.87.1）
-- 版本：`versionName 1.0.4` / `versionCode 56`
+- 版本：`versionName 1.0.5` / `versionCode 57`
+  - v1.0.5（code 57）：VK 交互——编辑按键布局期间锁抽屉（左列键可拖、强拉提示
+    未保存）+ 编辑条「交换左右」整簇互换 + 无文件兜底改方向左数字右
   - v1.0.4（code 56）：时空旅者卡死修复（inPaint 序列化闸）+ 读档 BGM 修复
     （PlayerHandle 存媒体字节）+ 捐赠移除 + 游戏内按键映射 + acra auto-service
     排除（APK 缩到 10.5MB）
