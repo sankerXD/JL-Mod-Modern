@@ -34,6 +34,8 @@
     <string name="layout_scale_mode">調整按鍵大小</string>
     <string name="vk_edit_done">完成</string>
     <string name="vk_edit_discard">放棄</string>
+    <string name="vk_edit_swap">交換左右</string>
+    <string name="vk_layout_unsaved">還沒有儲存按鍵佈挶</string>
     <string name="discard">放棄</string>
     <string name="vk_layout_save_prompt">需要儲存鍵盤佈局嗎</string>
     <string name="vk_hide_all">隱藏全部</string>

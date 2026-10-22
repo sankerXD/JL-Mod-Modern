@@ -59,6 +59,12 @@
                 android:text="@string/vk_edit_done" />
 
             <Button
+                android:id="@+id/vk_edit_swap"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/vk_edit_swap" />
+
+            <Button
                 android:id="@+id/vk_edit_discard"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

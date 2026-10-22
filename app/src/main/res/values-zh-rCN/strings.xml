@@ -60,6 +60,8 @@
     <string name="layout_scale_mode">调整按键大小</string>
     <string name="vk_edit_done">完成</string>
     <string name="vk_edit_discard">放弃</string>
+    <string name="vk_edit_swap">交换左右</string>
+    <string name="vk_layout_unsaved">还没有保存按键布局</string>
     <string name="discard">放弃</string>
     <string name="vk_layout_save_prompt">需要保存键盘布局吗</string>
     <string name="vk_hide_all">隐藏全部</string>

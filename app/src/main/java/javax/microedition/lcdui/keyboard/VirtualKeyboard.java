@@ -228,7 +228,7 @@ public class VirtualKeyboard implements Overlay, Runnable {
 		if (layoutVariant == -1) {
 			layoutVariant = settings.vkType;
 			if (layoutVariant == TYPE_CUSTOM) {
-				layoutVariant = TYPE_NUM_ARR;
+				layoutVariant = TYPE_ARR_NUM;
 			}
 		}
 		resetLayout(layoutVariant);
@@ -237,8 +237,8 @@ public class VirtualKeyboard implements Overlay, Runnable {
 				readLayout();
 			} catch (IOException e) {
 				e.printStackTrace();
-				resetLayout(TYPE_NUM_ARR);
-				layoutVariant = TYPE_NUM_ARR;
+				resetLayout(TYPE_ARR_NUM);
+				layoutVariant = TYPE_ARR_NUM;
 				saveLayout();
 			}
 		}
@@ -818,8 +818,62 @@ public class VirtualKeyboard implements Overlay, Runnable {
 		}
 	}
 
+	/**
+	 * Mirrors the layout left<->right by translating each snap-chain cluster
+	 * as a unit: only the cluster's SCREEN anchor offset changes, so the
+	 * internal arrangement of every cluster is preserved (1-2-3 stays 1-2-3).
+	 * Called from the layout-edit bar — persistence (and TYPE_CUSTOM marking)
+	 * rides the normal edit-mode done/discard path.
+	 */
+	public void swapSides() {
+		if (screen == null) {
+			return;
+		}
+		for (VirtualKey k : keypad) {
+			k.snapValid = false;
+		}
+		snapKeys();
+		int n = keypad.length;
+		int[] root = new int[n];
+		for (int i = 0; i < n; i++) {
+			int j = i;
+			for (int guard = 0; keypad[j].snapOrigin != SCREEN && guard < n; guard++) {
+				j = keypad[j].snapOrigin;
+			}
+			root[i] = j;
+		}
+		float[] left = new float[n];
+		float[] right = new float[n];
+		Arrays.fill(left, Float.MAX_VALUE);
+		Arrays.fill(right, -Float.MAX_VALUE);
+		for (int i = 0; i < n; i++) {
+			int g = root[i];
+			left[g] = Math.min(left[g], keypad[i].rect.left);
+			right[g] = Math.max(right[g], keypad[i].rect.right);
+		}
+		float w = screen.width();
+		for (int i = 0; i < n; i++) {
+			if (keypad[i].snapOrigin == SCREEN && left[i] <= right[i]) {
+				keypad[i].snapOffset.x += w - left[i] - right[i];
+			}
+		}
+		for (VirtualKey k : keypad) {
+			k.snapValid = false;
+		}
+		snapKeys();
+		overlayView.postInvalidate();
+	}
+
 	public int getLayoutEditMode() {
 		return layoutEditMode;
+	}
+
+	/**
+	 * True while a key is grabbed in layout-edit mode — used to tell a
+	 * legitimate key drag apart from a blocked drawer edge pull.
+	 */
+	public boolean isKeyGrabbed() {
+		return layoutEditMode == LAYOUT_KEYS && editedIndex >= 0;
 	}
 
 	public void setLayoutEditMode(int mode) {

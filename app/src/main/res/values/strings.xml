@@ -70,6 +70,8 @@
     <string name="layout_scale_mode">Keylayout resize mode</string>
     <string name="vk_edit_done">Done</string>
     <string name="vk_edit_discard">Discard</string>
+    <string name="vk_edit_swap">Swap L/R</string>
+    <string name="vk_layout_unsaved">Key layout not saved yet</string>
     <string name="discard">Discard</string>
     <string name="vk_layout_save_prompt">Save the key layout?</string>
     <string name="vk_hide_all">Hide all</string>

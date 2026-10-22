@@ -598,6 +598,33 @@ Mask brightness、Scanline、Threshold。
   `VirtualKeyboardLayout` 文件，走了 NUM_ARR 兜底（数字左方向右）。卖家的 506 份布局
   本来就是方向左数字右，数据迁移过来即正确。若新装无配置想要同款，得在游戏设置里
   把键盘类型切成 Custom/方向+数字。
+- **VKL 文件格式**（`VirtualKeyboardLayout`，v3）：`"VKL\0"`+version(3)+块序列
+  （块=type:4+len:4+data）。TYPE 块 1 字节（0=CUSTOM），KEYS 块每键 21B：
+  `hash(4)+visible(1)+snapOrigin(4)+snapMode(4)+offX(4f)+offY(4f)`。
+  `snapOrigin` = keypad 下标（0-27）或 -1=SCREEN 锚屏幕；`snapMode` = `RectSnap` 掩码
+  （SNAP_*边 + ALIGN_*对齐，EXT_*/INT_* 组合）；`hash`=普通键 `31*(31+keyCode)`、
+  DualKey `+secondKeyCode`。keypad 索引：0-8=数字1-9,9=0,10=*,11=#,12/13=左右软键,
+  14=D,15=C,16-23=方向八向,24=FIRE,25/26=A/B,27=MENU。
+- **内置兜底布局换成方向左**（Oct 2026）：`TYPE_CUSTOM` 无文件时原来兜底
+  `TYPE_NUM_ARR`（数字左方向右），与卖家惯例相反 → 改 `TYPE_ARR_NUM`（两处）。
+  已存在的镜像 VKL 文件（时空旅者等 3 个游戏）文件内键记录按 ARR_NUM 拓扑重写过
+  ——注意：只换 SCREEN 锚点会把簇甩出屏外（链式 snap 往簇外延），必须逐键改写
+  snapOrigin/snapMode。
+- **编辑按键布局条上的「交换左右」**（`vk_edit_swap` 按钮 → `VirtualKeyboard.swapSides()`）：
+  整簇刚性平移——按 snapOrigin 链找各键的 SCREEN 锚点分簇，每簇只改锚点
+  `snapOffset.x += screenW - (bbox.left + bbox.right)`（bbox=簇内键 rect 并集），
+  内部排列不变（1-2-3 仍 1-2-3），A/B 顶角自然互换。只改内存态——持久化和
+  TYPE_CUSTOM 标记走编辑模式的完成/放弃流程（放弃会连 swap 一起回滚）。
+  只在 LAYOUT_KEYS 模式显示（调大小模式隐藏）。
+  ⚠️ **`snapValid` 不在 `snapKeys()` 里重置**——重排前必须先手动清全部 key 的
+  `snapValid=false` 再 `snapKeys()`，否则链式键会拿 origin 的旧 rect 落位，簇直接散架
+  （`discardLayoutEdit` 同款模式）。
+- **编辑按键布局期间锁抽屉**：`beginVkLayoutEdit` → `LOCK_MODE_LOCKED_CLOSED`，
+  `endVkLayoutEdit` → 解锁。不然 DrawerLayout 的边滑在 onIntercept 阶段就把 touch
+  抢走，左列键永远拖不动（调大小模式同病）。强拉提示：`dispatchTouchEvent` 探测
+  "左缘 `scaledEdgeSlop` 内落下 → 右滑超过 `touchSlop` 且 `!vk.isKeyGrabbed()`"
+  → toast `vk_layout_unsaved`（键被抓着就不弹）；`openOptionsMenu`（M 键路径）
+  编辑中同样拦掉+toast。
 
 ---
 

@@ -42,6 +42,7 @@ import android.util.Log;
 import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.ViewConfiguration;
 import android.widget.PopupMenu;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -141,6 +142,11 @@ public class MicroActivity extends AppCompatActivity {
 	private BroadcastReceiver keyInjector;
 	private Menu drawerMenu;
 	private int drawerMode;
+	private int edgePullZone;
+	private int touchSlop;
+	private float edgeDownX;
+	private float edgeDownY;
+	private boolean edgePullArmed;
 	private boolean frozenForKeyMap;
 	private final PickFileResultContract shaderPickerContract = new PickFileResultContract();
 	private final ActivityResultLauncher<String[]> shaderPicker =
@@ -158,6 +164,9 @@ public class MicroActivity extends AppCompatActivity {
 		ContextHolder.setCurrentActivity(this);
 		binding = ActivityMicroBinding.inflate(getLayoutInflater());
 		setContentView(binding.getRoot());
+		ViewConfiguration vc = ViewConfiguration.get(this);
+		edgePullZone = vc.getScaledEdgeSlop();
+		touchSlop = vc.getScaledTouchSlop();
 		setSupportActionBar(binding.toolbar);
 		setVolumeControlStream(AudioManager.STREAM_MUSIC);
 		SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
@@ -222,6 +231,12 @@ public class MicroActivity extends AppCompatActivity {
 			}
 		}
 		binding.vkEditDone.setOnClickListener(v -> endVkLayoutEdit(true));
+		binding.vkEditSwap.setOnClickListener(v -> {
+			VirtualKeyboard vkSwap = ContextHolder.getVk();
+			if (vkSwap != null) {
+				vkSwap.swapSides();
+			}
+		});
 		binding.vkEditDiscard.setOnClickListener(v -> endVkLayoutEdit(false));
 		binding.vkHideAll.setOnClickListener(v -> toggleHideAllKeys());
 		setOrientation(orientation);
@@ -474,6 +489,31 @@ public class MicroActivity extends AppCompatActivity {
 		if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
 			flashHideAllButton();
 		}
+		// while key-layout editing the drawer is locked; an edge pull that
+		// isn't grabbing a key hints the layout hasn't been saved yet
+		VirtualKeyboard vkEdit = ContextHolder.getVk();
+		boolean editing =
+				vkEdit != null && vkEdit.getLayoutEditMode() != VirtualKeyboard.LAYOUT_EOF;
+		switch (event.getActionMasked()) {
+			case MotionEvent.ACTION_DOWN -> {
+				edgePullArmed = editing && event.getX() < edgePullZone;
+				edgeDownX = event.getX();
+				edgeDownY = event.getY();
+			}
+			case MotionEvent.ACTION_MOVE -> {
+				if (edgePullArmed) {
+					float dx = event.getX() - edgeDownX;
+					float dy = event.getY() - edgeDownY;
+					if (dx > touchSlop && dx > Math.abs(dy) * 2
+							&& (vkEdit == null || !vkEdit.isKeyGrabbed())) {
+						edgePullArmed = false;
+						Toast.makeText(this, R.string.vk_layout_unsaved,
+								Toast.LENGTH_SHORT).show();
+					}
+				}
+			}
+			case MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> edgePullArmed = false;
+		}
 		return super.dispatchTouchEvent(event);
 	}
 
@@ -497,6 +537,11 @@ public class MicroActivity extends AppCompatActivity {
 
 	@Override
 	public void openOptionsMenu() {
+		VirtualKeyboard vkEdit = ContextHolder.getVk();
+		if (vkEdit != null && vkEdit.getLayoutEditMode() != VirtualKeyboard.LAYOUT_EOF) {
+			Toast.makeText(this, R.string.vk_layout_unsaved, Toast.LENGTH_SHORT).show();
+			return;
+		}
 		if (drawerLayout != null) {
 			drawerLayout.openDrawer(binding.menuDrawer);
 			return;
@@ -1124,7 +1169,12 @@ public class MicroActivity extends AppCompatActivity {
 			return;
 		}
 		vk.beginLayoutEdit(mode);
+		binding.vkEditSwap.setVisibility(
+				mode == VirtualKeyboard.LAYOUT_KEYS ? View.VISIBLE : View.GONE);
 		binding.vkEditBar.setVisibility(View.VISIBLE);
+		// keep the drawer locked while editing — otherwise an edge pull steals
+		// the touch stream from keys being dragged along the left edge
+		drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED);
 		// take the hide-all toggle away while editing — toggling key
 		// visibility mid-edit makes no sense (all keys are shown anyway)
 		binding.vkHideAll.removeCallbacks(vkHideAllFadeOut);
@@ -1149,6 +1199,7 @@ public class MicroActivity extends AppCompatActivity {
 			vk.discardLayoutEdit();
 		}
 		binding.vkEditBar.setVisibility(View.GONE);
+		drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED);
 		setGameFrozen(false);
 		flashHideAllButton();
 	}
