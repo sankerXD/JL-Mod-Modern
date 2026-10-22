@@ -46,8 +46,7 @@ input including analog triggers, and scaling modes tuned for today's screens.
 Native libraries are prebuilt in `app/src/main/jniLibs`, so the NDK is not
 needed. snapvm is included as a composite build (`includeBuild("../snapvm")` in
 `settings.gradle.kts`) — clone [snapvm](https://github.com/sankerXD/snapvm) next
-to this repo, or drop the published jar into `mavenLocal`. Implementation notes
-are in [AGENTS.md](AGENTS.md).
+to this repo, or drop the published jar into `mavenLocal`. 
 
 ## 中文简介
 
