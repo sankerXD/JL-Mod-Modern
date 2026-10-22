@@ -3,6 +3,7 @@ package org.snapvm.adapter;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -250,7 +251,26 @@ public final class SnapHandles {
 			try {
 				// impl field names differ: MicroPlayer.source,
 				// SynthPlayer.dataSource — locate by type, not name
-				String locator = locatorOf(h);
+				DataSource ds = dataSourceOf(h);
+				// Stream-created players carry an InternalDataSource whose
+				// mediaFile holds the actual bytes — capture the CONTENT,
+				// not the locator: getLocator() returns a bare temp path
+				// with no scheme (unparseable by createPlayer) and the file
+				// is deleteOnExit anyway. Real resource:/device: locators
+				// remain meaningful → keep as fallback.
+				byte[] media = null;
+				String type = null;
+				String locator = null;
+				if (ds != null) {
+					type = ds.getContentType();
+					media = mediaBytesOf(ds);
+					if (media == null) {
+						String l = ds.getLocator();
+						if (l != null && l.contains("://")) {
+							locator = l;
+						}
+					}
+				}
 				Object[] listeners;
 				try {
 					listeners = ((java.util.ArrayList<?>)
@@ -259,7 +279,7 @@ public final class SnapHandles {
 					listeners = new Object[0];
 				}
 				return new Object[]{
-						locator, p.getState(),
+						media, type, locator, p.getState(),
 						fieldOr(h, 1, "loopCount"),
 						fieldOr(h, false, "mute"),
 						fieldOr(h, 100, "level", "volume"),
@@ -273,14 +293,34 @@ public final class SnapHandles {
 			}
 		}
 
-		private static String locatorOf(Object h) throws IllegalAccessException {
+		private static DataSource dataSourceOf(Object h) throws IllegalAccessException {
 			for (Class<?> x = h.getClass(); x != null; x = x.getSuperclass()) {
 				for (Field f : x.getDeclaredFields()) {
 					if (!Modifier.isStatic(f.getModifiers())
 							&& DataSource.class.isAssignableFrom(f.getType())) {
 						f.setAccessible(true);
-						Object ds = f.get(h);
-						return ds != null ? ((DataSource) ds).getLocator() : null;
+						return (DataSource) f.get(h);
+					}
+				}
+			}
+			return null;
+		}
+
+		/** FileCacheDataSource.mediaFile holds the piped media bytes. */
+		private static byte[] mediaBytesOf(DataSource ds) throws IllegalAccessException {
+			for (Class<?> x = ds.getClass(); x != null; x = x.getSuperclass()) {
+				for (Field f : x.getDeclaredFields()) {
+					if (!Modifier.isStatic(f.getModifiers())
+							&& java.io.File.class.isAssignableFrom(f.getType())) {
+						f.setAccessible(true);
+						java.io.File file = (java.io.File) f.get(ds);
+						try {
+							return file != null && file.isFile()
+									? java.nio.file.Files.readAllBytes(file.toPath())
+									: null;
+						} catch (java.io.IOException e) {
+							return null;
+						}
 					}
 				}
 			}
@@ -308,12 +348,74 @@ public final class SnapHandles {
 
 		public Object revive(Vm vm, Object rec) {
 			Object[] r = (Object[]) rec;
+			if (r.length == 8) {
+				// pre-content records {locator, state, loop, mute, level,
+				// pan, mediaTime, listeners} — the media bytes were never
+				// captured so the BGM can't come back; decode at old
+				// indices and keep the old locator behaviour.
+				return reviveLegacy(vm, r);
+			}
+			byte[] media = (byte[]) r[0];
+			String type = (String) r[1];
+			String locator = (String) r[2];
+			try {
+				// media bytes win — they survive restarts and rebuild the
+				// exact stream-sourced player; locator only when no content
+				// was capturable; a null both-ways means a truly source-less
+				// player → silent stub rather than fail the whole load.
+				Player p = media != null
+						? Manager.createPlayer(
+								new ByteArrayInputStream(media), type)
+						: locator != null
+								? Manager.createPlayer(locator)
+								: new javax.microedition.media.BasePlayer();
+				int state = (Integer) r[3];
+				if (state >= Player.REALIZED) {
+					p.realize();
+				}
+				if (state >= Player.PREFETCHED) {
+					p.prefetch();
+				}
+				p.setLoopCount((Integer) r[4]);
+				// MicroPlayer is package-private — volume/mute go through
+				// its VolumeControl; pan through reflection.
+				javax.microedition.media.Control vc =
+						p.getControl(javax.microedition.media.control.VolumeControl.class.getName());
+				if (vc instanceof javax.microedition.media.control.VolumeControl) {
+					javax.microedition.media.control.VolumeControl v =
+							(javax.microedition.media.control.VolumeControl) vc;
+					v.setMute((Boolean) r[5]);
+					v.setLevel((Integer) r[6]);
+				}
+				try {
+					java.lang.reflect.Method m =
+							p.getClass().getMethod("setPan", int.class);
+					m.setAccessible(true);
+					m.invoke(p, r[7]);
+				} catch (Exception ignored) {
+				}
+				long mt = (Long) r[8];
+				if (mt >= 0) {
+					p.setMediaTime(mt);
+				}
+				for (Object l : (Object[]) r[9]) {
+					p.addPlayerListener(
+							(PlayerListener) vm.toHost(l, PlayerListener.class));
+				}
+				if (state == Player.STARTED) {
+					p.start();
+				}
+				return p;
+			} catch (Exception e) {
+				throw new VmError("Player revive failed", e);
+			}
+		}
+
+		/** 8-element locator-only record written before media capture existed. */
+		private Object reviveLegacy(Vm vm, Object[] r) {
 			String locator = (String) r[0];
 			try {
-				// no DataSource-typed field (RecordPlayer, stream players
-				// without one) — revive as a silent stub rather than fail
-				// the whole load; game calls on it just no-op
-				Player p = locator != null
+				Player p = locator != null && locator.contains("://")
 						? Manager.createPlayer(locator)
 						: new javax.microedition.media.BasePlayer();
 				int state = (Integer) r[1];
@@ -324,8 +426,6 @@ public final class SnapHandles {
 					p.prefetch();
 				}
 				p.setLoopCount((Integer) r[2]);
-				// MicroPlayer is package-private — volume/mute go through
-				// its VolumeControl; pan through reflection.
 				javax.microedition.media.Control vc =
 						p.getControl(javax.microedition.media.control.VolumeControl.class.getName());
 				if (vc instanceof javax.microedition.media.control.VolumeControl) {

@@ -297,7 +297,7 @@ Mask brightness、Scanline、Threshold。
 - 抽屉内容**由同一份菜单资源** `res/menu/midlet_displayable.xml` 动态生成（`setupMenuDrawer()`），
   顶层「退出 / 即时存档 / 读取即时存档 / 编辑即时存档」，往下两个子类别：
   **显示设置**（锁定屏幕旋转 / 原生分辨率 / 缩放设置 / 着色器 / 屏幕截图 / 限制 FPS）、
-  存储日志，**虚拟键盘**（编辑按键布局 / 调整按键大小 / 布局切换 / 隐藏按键）。
+  存储日志，**虚拟键盘**（编辑按键布局 / 调整按键大小 / 布局切换 / 隐藏按键 / 按键映射）。
   子类别就是 `<item>` 里嵌 `<menu>`（`action_submenu_display` / `action_submenu_vk`），
   `fillDrawerItems()` 遇到 `hasSubMenu()` 渲染成灰色小标题 + 缩进子项；
   点击走原来的 `onOptionsItemSelected()`，行为一致（含可勾选项状态切换）。
@@ -322,6 +322,32 @@ Mask brightness、Scanline、Threshold。
 >   屏幕任意触摸经 `dispatchTouchEvent` → `flashHideAllButton()` 唤出，编辑键盘时不显示）：
 >   `toggleHideAllKeys()` 全隐↔全显切换 + `onLayoutChanged` 落盘；
 >   `updateHideAllButton()` 在隐藏按键对话框/布局切换/编辑结束时刷新文案。
+
+> **虚拟键盘 → 按键映射（游戏内改映射）**：`action_key_mapping` →
+> `MicroActivity.openKeyMapper()` —— `setGameFrozen(true)`（SnapVm.setFrozen 停泵）
+> 后 `startActivity(KeyMapperActivity)`，data = `microLoader.params.dir`（当前游戏
+> config 目录，和 ConfigActivity `cmdKeyMappings` 同款路径）。返回时 `onResume`
+> 经 `frozenForKeyMap` 标志做三件事：`ProfilesManager.loadConfig` 重读 config.json
+> 把新 `keyMappings` 合并进运行中的 params → `KeyMapper.setKeyMapping(params)` 重建
+> 静态映射表（映射立即生效）→ `menuKey` 刷新 → `setGameFrozen(false)` 解冻。
+> 期间 onPause 照常走 `MidletThread.pauseApp()`（guest 在 MidletThread 上执行
+> pauseApp，不受 frozen 影响），生命周期与退后台一致。映射界面在 VK 编辑态会先弹
+> 「保存键盘布局吗」拦截（复用 `confirmLayoutEditThen`），不会出现编辑中直接跳走。
+
+> 主界面 ⋮ 菜单的「捐赠」已整个移除（原发起者的 ЮMoney 渠道）：`action_donate` 菜单项、
+> `donations/DonationsActivity+Fragment`、`activity_donations/fragment_donations` 两个
+> layout、manifest 声明与 `org.sufficientlysecure.donations` overrideLibrary、
+> `com.github.penn5:donations` 依赖。各地 strings.xml 的 `donate` 字符串留作死文案。
+>
+> ⚠️ **顺手修了一个潜伏的 release 构建炸弹**：donations 依赖一删，R8 就炸
+> `Missing class javax.annotation.processing.AbstractProcessor`——acra 把
+> `auto-service` 注解处理器当 api 依赖拖进运行时 classpath（上游打包瑕疵），
+> 它的 `META-INF/services/javax.annotation.processing.Processor` 服务文件 +
+> `AutoServiceProcessor extends AbstractProcessor` 引用 JDK-only 类必过 R8 检查。
+> 之前能编过纯属 donations 传递依赖遮蔽（billingclient 等改变了 classpath 形态）。
+> 修法：`acra-http` 上 `exclude(group="com.google.auto.service", module="auto-service")`——
+> acra 运行时零 `com/google/common` 引用（查过 20 处 auto 引用全是 @AutoService 注解，
+> 运行时静默忽略），连 auto-common + guava-32 一起移出 APK（省 ~3MB）。
 
 > 「键盘类型(IME)」项已移除，换成「着色器」（游戏内实时切换）：
 > `MicroActivity.showShaderDialog` 复用设置页同款 `PickFileResultContract`+`ShaderList.validate`，
@@ -537,6 +563,18 @@ Mask brightness、Scanline、Threshold。
   正常前进——恢复的 VM 完全活着可交互。
 - **待办**：多槽位 UI（等用户给样式再动，路径已按 `snap<slot>.svm` 预留）；
   新游戏存档撞未注册 host 对象会响铃报类名，照 `SnapHandles` 现有样子补。
+- **BGM 读档丢失修复**（时空旅者，Oct 2026）：`PlayerHandle` 原来只存
+  `ds.getLocator()`——stream 型 `createPlayer(stream,type)` 出来的
+  `InternalDataSource`（`FileCacheDataSource` 子类）`getLocator()` 返回的是
+  **没有 scheme 的临时文件绝对路径**，且文件 `deleteOnExit`/`disconnect()` 会删
+  ——`revive` 拿它走 `createPlayer(locator)` 一个 scheme 都不匹配，落到 else 返回
+  **静默 BasePlayer**，BGM 永久哑掉。修法：capture 改抓**媒体内容**——
+  `mediaFile` 字节 + `contentType`（locator 只留给真 `://` 的 resource/device
+  源作兜底）；revive 走 `createPlayer(ByteArrayInputStream, type)` 重建真 Player。
+  记录格式从 8 元素变 10 元素，`revive` 按 `r.length==8` 走 legacy 分支兼容旧档。
+  实测：snap 里能 grep 到 `MThd`+`audio/midi`，读档后 MediaCodec 起播。
+- **测试钩子**：KEYINJECT 广播加 `--es op save|load --ei slot N`，
+  走的就是抽屉的 `doSlotSave/doSlotLoad`（debug only）。
 
 ---
 

@@ -60,6 +60,9 @@
                 <item
                     android:id="@+id/action_hide_buttons"
                     android:title="@string/hide_buttons" />
+                <item
+                    android:id="@+id/action_key_mapping"
+                    android:title="@string/pref_map_keys" />
             </menu>
         </item>
     </group>

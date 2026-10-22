@@ -159,12 +159,18 @@ dependencies {
     implementation("androidx.drawerlayout:drawerlayout:1.2.0")
     implementation("com.google.oboe:oboe:1.7.0")
 
-    implementation("ch.acra:acra-http:5.11.3")
+    implementation("ch.acra:acra-http:5.11.3") {
+        // acra ships the auto-service annotation processor on the runtime
+        // classpath (upstream packaging wart). Its META-INF service file +
+        // javax.annotation.processing refs break R8's missing-class check;
+        // acra never touches it at runtime — drop it (and auto-common+guava
+        // which only ride along through it).
+        exclude(group = "com.google.auto.service", module = "auto-service")
+    }
     implementation("com.github.nikita36078:mobile-ffmpeg:v4.3.2-compact")
     implementation("com.github.nikita36078:pngj:2.2.3")
     implementation("com.github.woesss:filepicker:4.4.0")
     implementation("com.github.yukuku:ambilwarna:2.0.1")
-    implementation("com.github.penn5:donations:3.6.0")
     //noinspection GradleDependency (next version incompatible with Android 4)
     implementation("com.google.code.gson:gson:2.9.1")
     implementation("io.reactivex.rxjava2:rxandroid:2.1.1")

@@ -764,9 +764,20 @@ public abstract class Canvas extends Displayable {
 			r = paintEvent.clip.right;
 			b = paintEvent.clip.bottom;
 			paintEvent.clip.setEmpty();
-		}
-		if (l >= r || t >= b) {
-			return;
+			if (l >= r || t >= b)
+				return;
+			// Serialize guest paints across the two paths (EQ-dispatched
+			// PaintEvent.process vs this inline drain). 时空旅者's repaint()+
+			// serviceRepaints loop can land a second clip while the other
+			// path is still mid-paint → two green threads inside e.a's shared
+			// actor-list build → torn list → cyclic draw chain → hard wedge.
+			// A concurrent request re-arms its clip and returns; the next
+			// drain paints it. Frames drop, lists never tear.
+			if (inPaint) {
+				paintEvent.clip.set(l, t, r, b);
+				return;
+			}
+			inPaint = true;
 		}
 		synchronized (bufferLock) {
 			Bitmap bmp = offscreen.getBitmap();
@@ -778,7 +789,6 @@ public abstract class Canvas extends Displayable {
 		Graphics g = inlineGraphics;
 		g.reset(l, t, r, b);
 		try {
-			inPaint = true;
 			paint(g);
 		} catch (Throwable e) {
 			Log.e(TAG, "Error in paint()", e);
@@ -1050,14 +1060,19 @@ public abstract class Canvas extends Displayable {
 				r = clip.right;
 				b = clip.bottom;
 				clip.setEmpty();
-			}
-			if (l >= r || t >= b) {
-				return;
+				if (l >= r || t >= b)
+					return;
+				// Same gate as processPendingRepaint: never let two green
+				// threads paint concurrently (see that method's comment).
+				if (inPaint) {
+					clip.set(l, t, r, b);
+					return;
+				}
+				inPaint = true;
 			}
 			Graphics g = offscreen.getSingleGraphics();
 			g.reset(l, t, r, b);
 			try {
-				inPaint = true;
 				paint(g);
 			} catch (Throwable e) {
 				Log.e(TAG, "Error in paint()", e);

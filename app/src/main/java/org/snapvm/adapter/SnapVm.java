@@ -42,6 +42,8 @@ public final class SnapVm {
 	private static final String ERR_FILE = "snapvm.err";
 	private static final String SAMPLE_FILE = "snapvm.sample";
 	private static final String STACKDUMP_FILE = "snapvm.stackdump";
+	// write a guest class name into this file to dump its statics to logcat
+	private static final String STATICS_FILE = "snapvm.statics";
 
 	private static volatile SnapVm instance;
 
@@ -175,6 +177,103 @@ public final class SnapVm {
 		if (waitMs > srMsMax) srMsMax = waitMs;
 	}
 
+	/**
+	 * Diagnostic for the snapvm.statics marker: logs scalars + arrays of the
+	 * named guest class, and for the 时空旅者 actor engine (class "e") walks the
+	 * O→N[] active-actor list and the aL[] draw list to expose cycles.
+	 */
+	private void dumpStatics(String className) {
+		try {
+			java.util.Map<String, Object> m = vm.staticMap(className);
+			if (m.isEmpty()) {
+				Log.i(TAG, "statics: no class " + className);
+				return;
+			}
+			StringBuilder sb = new StringBuilder("=== statics ").append(className).append(" ===\n");
+			for (java.util.Map.Entry<String, Object> e : m.entrySet()) {
+				Object v = e.getValue();
+				if (v instanceof short[])
+					sb.append(e.getKey()).append("=short[").append(((short[]) v).length).append("]\n");
+				else if (v instanceof int[])
+					sb.append(e.getKey()).append("=int[").append(((int[]) v).length).append("]\n");
+				else if (v instanceof Object[])
+					sb.append(e.getKey()).append("=obj[").append(((Object[]) v).length).append("]\n");
+				else
+					sb.append(e.getKey()).append('=').append(v).append('\n');
+			}
+			Log.i(TAG, sb.toString());
+			if (!className.equals("e"))
+				return;
+			// actor-engine forensics: walk O via N[], report the traversal and
+			// where a cycle closes; then the aL[] draw-list head chain.
+			short[] N = (short[]) m.get("N|[S"), aL = (short[]) m.get("aL|[S"),
+					aJ = (short[]) m.get("aJ|[S"), aI = (short[]) m.get("aI|[S");
+			Integer O = (Integer) m.get("O|I"), aK = (Integer) m.get("aK|I"),
+					aM = (Integer) m.get("aM|I"), aO = (Integer) m.get("aO|I");
+			Log.i(TAG, "actors: O=" + O + " aK=" + aK + " aM=" + aM + " aO=" + aO
+					+ " | N=" + walk(N, O) + " | aL=" + walk(aL, aM));
+			if (N != null) Log.i(TAG, "N[]=" + java.util.Arrays.toString(N));
+			if (aL != null) Log.i(TAG, "aL[]=" + java.util.Arrays.toString(aL));
+			// per-actor K (sort key) + a-field state for every node N links to
+			Object[] M = (Object[]) m.get("M|[La;");
+			if (M != null) {
+				StringBuilder ks = new StringBuilder("K[]:");
+				for (int i = 0; i < M.length; i++) {
+					Object ai = M[i];
+					if (ai == null) continue;
+					try {
+						java.lang.reflect.Field f = ai.getClass().getDeclaredField("fields");
+						f.setAccessible(true);
+						Object[] fv = (Object[]) f.get(ai);
+						java.lang.reflect.Field cf = ai.getClass().getDeclaredField("clazz");
+						cf.setAccessible(true);
+						Object vc = cf.get(ai);
+						java.lang.reflect.Field sl = vc.getClass().getDeclaredField("fieldSlots");
+						sl.setAccessible(true);
+						java.util.Map<?, ?> slots = (java.util.Map<?, ?>) sl.get(vc);
+						Object kIdx = slots.get("K|I"), aIdx = slots.get("a|I");
+						ks.append(' ').append(i).append(':')
+								.append(kIdx == null ? "?" : fv[(Integer) kIdx]).append('/')
+								.append(aIdx == null ? "?" : fv[(Integer) aIdx]);
+					} catch (Throwable ignored) {
+					}
+				}
+				Log.i(TAG, ks.toString());
+			}
+			if (aJ != null) Log.i(TAG, "aJ=" + java.util.Arrays.toString(aJ));
+			if (aI != null) Log.i(TAG, "aI=" + java.util.Arrays.toString(aI));
+			// e.c resource blob + bD count — bE-null NPE forensics
+			Object cb = m.get("c|[B"), bd = m.get("bD|I"), w = m.get("W|I");
+			if (cb instanceof byte[]) {
+				byte[] a = (byte[]) cb;
+				StringBuilder hex = new StringBuilder("c len=").append(a.length)
+						.append(" bD=").append(bd).append(" W=").append(w).append(" c[:64]=");
+				for (int i = 0; i < Math.min(64, a.length); i++)
+					hex.append(String.format("%02x", a[i]));
+				Log.i(TAG, hex.toString());
+			}
+		} catch (Throwable t) {
+			Log.i(TAG, "statics dump failed: " + t);
+		}
+	}
+
+	/** follow a short[] next-index list from head; stop at -1 or the 3rd revisit. */
+	private static String walk(short[] next, Integer head) {
+		if (next == null || head == null)
+			return "n/a";
+		StringBuilder sb = new StringBuilder();
+		java.util.HashSet<Integer> seen = new java.util.HashSet<>();
+		for (int i = head, hops = 0; i >= 0 && i < next.length && hops < 520; hops++) {
+			sb.append(' ').append(i);
+			if (!seen.add(i)) {
+				sb.append(" <CYCLE>");
+				break;
+			}
+			i = next[i];
+		}
+		return sb.toString();
+	}
+
 	private void start() {
 		running = true;
 		// independent diagnostic thread: polls the stackdump marker and dumps
@@ -185,9 +284,15 @@ public final class SnapVm {
 			if (emuDir == null)
 				return;
 			File marker = new File(emuDir, STACKDUMP_FILE);
+			File staticsMarker = new File(emuDir, STATICS_FILE);
 			while (running) {
 				try {
 					Thread.sleep(500);
+					if (staticsMarker.exists()) {
+						String cls = readRegex(staticsMarker);
+						staticsMarker.delete();
+						dumpStatics(cls);
+					}
 					if (!marker.exists())
 						continue;
 					marker.delete();

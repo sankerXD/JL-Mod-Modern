@@ -95,6 +95,7 @@ import javax.microedition.lcdui.Form;
 import javax.microedition.lcdui.ViewHandler;
 import javax.microedition.lcdui.event.CanvasEvent;
 import javax.microedition.lcdui.event.SimpleEvent;
+import javax.microedition.lcdui.keyboard.KeyMapper;
 import javax.microedition.lcdui.keyboard.TriggerAxisHandler;
 import javax.microedition.lcdui.keyboard.VirtualKeyboard;
 import javax.microedition.lcdui.skin.SkinLayer;
@@ -114,6 +115,7 @@ import ru.playsoftware.j2meloader.config.ShaderList;
 import ru.playsoftware.j2meloader.config.model.Size;
 import ru.playsoftware.j2meloader.databinding.ActivityMicroBinding;
 import ru.playsoftware.j2meloader.databinding.DialogInputBinding;
+import ru.playsoftware.j2meloader.settings.KeyMapperActivity;
 import ru.playsoftware.j2meloader.util.Constants;
 import ru.playsoftware.j2meloader.util.LogUtils;
 import ru.playsoftware.j2meloader.util.PickFileResultContract;
@@ -139,6 +141,7 @@ public class MicroActivity extends AppCompatActivity {
 	private BroadcastReceiver keyInjector;
 	private Menu drawerMenu;
 	private int drawerMode;
+	private boolean frozenForKeyMap;
 	private final PickFileResultContract shaderPickerContract = new PickFileResultContract();
 	private final ActivityResultLauncher<String[]> shaderPicker =
 			registerForActivityResult(shaderPickerContract, this::onShaderPicked);
@@ -231,6 +234,18 @@ public class MicroActivity extends AppCompatActivity {
 		keyInjector = new BroadcastReceiver() {
 			@Override
 			public void onReceive(Context context, Intent i) {
+				// snapshot test hook: --es op save|load --ei slot N runs the
+				// same slot path the drawer uses (am broadcast -a ...KEYINJECT
+				// --es op save --ei slot 0).
+				String op = i.getStringExtra("op");
+				if (op != null) {
+					int slot = i.getIntExtra("slot", 0);
+					runOnUiThread(() -> {
+						if ("save".equals(op)) doSlotSave(slot);
+						else if ("load".equals(op)) doSlotLoad(slot);
+					});
+					return;
+				}
 				Displayable d = getCurrent();
 				Log.i("SnapVm", "keyinject key=" + i.getIntExtra("key", 0)
 						+ " current=" + d);
@@ -276,6 +291,11 @@ public class MicroActivity extends AppCompatActivity {
 	@Override
 	public void onResume() {
 		super.onResume();
+		if (frozenForKeyMap) {
+			frozenForKeyMap = false;
+			applyKeyMappingsFromDisk();
+			setGameFrozen(false);
+		}
 		visible = true;
 		MidletThread.resumeApp();
 	}
@@ -1046,7 +1066,51 @@ public class MicroActivity extends AppCompatActivity {
 			showSetLayoutDialog();
 		} else if (id == R.id.action_hide_buttons) {
 			showHideButtonDialog();
+		} else if (id == R.id.action_key_mapping) {
+			openKeyMapper();
 		}
+	}
+
+	/**
+	 * Opens the same key-mapping screen the per-game config offers, with the
+	 * guest VM frozen underneath (SnapVm.setFrozen — same mechanism the VK
+	 * layout editor uses). When the mapper returns, onResume picks the flag
+	 * up: the possibly-rewritten config.json is merged back into the live
+	 * profile and the freeze lifted.
+	 */
+	private void openKeyMapper() {
+		ProfileModel params = microLoader.params;
+		if (params == null || params.dir == null) {
+			return;
+		}
+		frozenForKeyMap = true;
+		setGameFrozen(true);
+		try {
+			startActivity(new Intent(this, KeyMapperActivity.class)
+					.setData(Uri.parse(params.dir.getPath())));
+		} catch (Exception e) {
+			frozenForKeyMap = false;
+			setGameFrozen(false);
+			throw e;
+		}
+	}
+
+	/**
+	 * KeyMapperActivity edits a fresh ProfileModel loaded from config.json
+	 * and persists it on finish; re-load the mapping into the running
+	 * profile and rebuild the live key tables so changes apply immediately.
+	 */
+	private void applyKeyMappingsFromDisk() {
+		ProfileModel params = microLoader.params;
+		if (params == null || params.dir == null) {
+			return;
+		}
+		ProfileModel fresh = ProfilesManager.loadConfig(params.dir);
+		if (fresh != null) {
+			params.keyMappings = fresh.keyMappings;
+		}
+		KeyMapper.setKeyMapping(params);
+		menuKey = microLoader.getMenuKeyCode();
 	}
 
 	/**

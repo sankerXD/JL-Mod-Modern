@@ -79,7 +79,6 @@ import ru.playsoftware.j2meloader.config.Config;
 import ru.playsoftware.j2meloader.config.ProfilesActivity;
 import ru.playsoftware.j2meloader.databinding.DialogInputBinding;
 import ru.playsoftware.j2meloader.databinding.FragmentAppslistBinding;
-import ru.playsoftware.j2meloader.donations.DonationsActivity;
 import ru.playsoftware.j2meloader.filepicker.FilteredFilePickerActivity;
 import ru.playsoftware.j2meloader.info.AboutDialogFragment;
 import ru.playsoftware.j2meloader.info.HelpDialogFragment;
@@ -302,9 +301,6 @@ public class AppsListFragment extends Fragment implements MenuProvider {
 		} else if (itemId == R.id.action_help) {
 			HelpDialogFragment helpDialogFragment = new HelpDialogFragment();
 			helpDialogFragment.show(getChildFragmentManager(), "help");
-		} else if (itemId == R.id.action_donate) {
-			Intent donationsIntent = new Intent(activity, DonationsActivity.class);
-			startActivity(donationsIntent);
 		} else if (itemId == R.id.action_save_log) {
 			try {
 				LogUtils.writeLog();
